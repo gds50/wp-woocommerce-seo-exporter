@@ -153,3 +153,68 @@ def test_write_csv_writes_header_only_when_rows_are_empty(tmp_path):
 
     content = output_path.read_text(encoding="utf-8-sig").splitlines()
     assert content == ["entity_type;id;url;seo_title;seo_description"]
+
+
+def test_apply_query_filters_respects_products_only_and_categories_only(valid_config):
+    specs = se.build_query_specs(valid_config)
+
+    products_only = se.apply_query_filters(specs, products_only=True, categories_only=False)
+    categories_only = se.apply_query_filters(specs, products_only=False, categories_only=True)
+
+    assert [spec.name for spec in products_only] == ["products"]
+    assert [spec.name for spec in categories_only] == ["categories"]
+
+
+def test_dry_run_queries_returns_counts_per_query(valid_config, monkeypatch):
+    specs = [
+        se.QuerySpec(name="products", sql="SELECT products", entity_type="product"),
+        se.QuerySpec(name="categories", sql="SELECT categories", entity_type="category"),
+    ]
+
+    class FakeTunnel:
+        local_bind_port = 3307
+
+        def __init__(self, gateway, **kwargs):
+            self.gateway = gateway
+            self.kwargs = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeCursor:
+        def __init__(self):
+            self.sql = ""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, sql):
+            self.sql = sql
+
+        def fetchall(self):
+            if "products" in self.sql:
+                return [
+                    {"id": 1, "url": "product/item-1/", "seo_title": "Title 1", "seo_description": "Desc 1"},
+                    {"id": 2, "url": "product/item-2/", "seo_title": "Title 2", "seo_description": "Desc 2"},
+                ]
+            return [{"id": 11, "url": "product-category/cat-1/", "seo_title": "Cat", "seo_description": "Cat desc"}]
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(se, "SSHTunnelForwarder", FakeTunnel)
+    monkeypatch.setattr(se.pymysql, "connect", lambda **kwargs: FakeConnection())
+
+    counts = se.dry_run_queries(valid_config, specs)
+
+    assert counts == {"products": 2, "categories": 1}

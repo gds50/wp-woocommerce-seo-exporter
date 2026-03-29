@@ -475,6 +475,63 @@ def test_connection(config: Dict[str, Any]) -> None:
     fetch_rows(config, [test_spec])
 
 
+def dry_run_queries(config: Dict[str, Any], specs: Iterable[QuerySpec]) -> Dict[str, int]:
+    """Execute export queries without writing CSV and return row counts per query."""
+    ssh_cfg = config["ssh"]
+    db_cfg = config["database"]
+    base_url = config["export"]["base_url"].rstrip("/")
+    spec_list = list(specs)
+    query_counts: Dict[str, int] = {}
+
+    tunnel_kwargs = get_tunnel_kwargs(config)
+    gateway = (ssh_cfg["host"], int(ssh_cfg["port"]))
+
+    try:
+        LOGGER.info("Opening SSH tunnel for dry run with %s query(s).", len(spec_list))
+        with SSHTunnelForwarder(gateway, **tunnel_kwargs) as tunnel:
+            try:
+                LOGGER.info("Connecting to database through SSH tunnel.")
+                connection = pymysql.connect(
+                    host="127.0.0.1",
+                    port=tunnel.local_bind_port,
+                    user=db_cfg["user"],
+                    password=db_cfg["password"],
+                    database=db_cfg["name"],
+                    charset=db_cfg.get("charset", "utf8mb4"),
+                    cursorclass=DictCursor,
+                    autocommit=True,
+                )
+            except pymysql.MySQLError as exc:
+                raise RuntimeError("Database connection failed. Check MySQL credentials, database name, and tunnel settings.") from exc
+
+            try:
+                with connection.cursor() as cursor:
+                    for spec in spec_list:
+                        LOGGER.info("Running dry-run query: %s", spec.name)
+                        try:
+                            cursor.execute(spec.sql)
+                            result = cursor.fetchall()
+                        except pymysql.MySQLError as exc:
+                            raise RuntimeError(f"SQL query failed for '{spec.name}'. Check the configured SQL and database structure.") from exc
+
+                        query_counts[spec.name] = len(result)
+                        if not result:
+                            LOGGER.warning("Dry-run query '%s' returned 0 rows.", spec.name)
+                            continue
+
+                        for row in result:
+                            validate_row(row, spec.entity_type, base_url)
+            finally:
+                connection.close()
+                LOGGER.info("Database connection closed.")
+    except BaseSSHTunnelForwarderError as exc:
+        raise RuntimeError("SSH tunnel connection failed. Check SSH host, port, credentials, and remote MySQL bind settings.") from exc
+    except OSError as exc:
+        raise RuntimeError("SSH connection failed due to a network or socket error.") from exc
+
+    return query_counts
+
+
 def diagnose_seo_sources(config: Dict[str, Any]) -> None:
     """Inspect common WooCommerce SEO meta storages without exporting CSV."""
     ssh_cfg = config["ssh"]
@@ -627,12 +684,24 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--init", action="store_true", help="Initialize config.json interactively.")
     parser.add_argument("--run", action="store_true", help="Run export using config.json.")
+    parser.add_argument("--dry-run", action="store_true", help="Run export queries and count rows without writing CSV.")
+    parser.add_argument("--check-connection", action="store_true", help="Check config, SSH tunnel, and MySQL connectivity without running export SQL.")
     parser.add_argument("--diagnose-seo", action="store_true", help="Detect which built-in SEO sources are present in the database.")
     parser.add_argument("--output", help="Override output CSV file path.")
     parser.add_argument("--products-only", action="store_true", help="Export only product rows.")
     parser.add_argument("--categories-only", action="store_true", help="Export only category rows.")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging.")
     return parser.parse_args()
+
+
+def apply_query_filters(specs: List[QuerySpec], products_only: bool, categories_only: bool) -> List[QuerySpec]:
+    """Apply CLI query filters without changing query definitions."""
+    filtered_specs = list(specs)
+    if products_only:
+        filtered_specs = [spec for spec in filtered_specs if spec.name == "products"]
+    if categories_only:
+        filtered_specs = [spec for spec in filtered_specs if spec.name == "categories"]
+    return filtered_specs
 
 
 def main() -> int:
@@ -644,9 +713,31 @@ def main() -> int:
         init_config()
         return 0
 
-    if args.run and args.diagnose_seo:
-        print("❌ Error: choose one action. Use --run or --diagnose-seo.")
+    selected_actions = []
+    if args.run:
+        selected_actions.append("--run")
+    if args.dry_run:
+        selected_actions.append("--dry-run")
+    if args.check_connection:
+        selected_actions.append("--check-connection")
+    if args.diagnose_seo:
+        selected_actions.append("--diagnose-seo")
+
+    if len(selected_actions) > 1:
+        print(f"❌ Error: choose one action. Conflicting options: {', '.join(selected_actions)}")
         return 2
+
+    if args.check_connection:
+        try:
+            config = validate_config(load_config())
+            LOGGER.info("Starting connection check.")
+            test_connection(config)
+            print("✅ Connection check passed: SSH tunnel and MySQL access are working.")
+            return 0
+        except Exception as exc:  # pylint: disable=broad-except
+            LOGGER.exception("Connection check failed: %s", exc)
+            print(f"❌ Error: {exc}")
+            return 1
 
     if args.diagnose_seo:
         try:
@@ -658,18 +749,41 @@ def main() -> int:
             print(f"❌ Error: {exc}")
             return 1
 
+    if args.dry_run:
+        try:
+            config = validate_config(load_config())
+            specs = apply_query_filters(build_query_specs(config), args.products_only, args.categories_only)
+
+            if not specs:
+                raise ValueError("No queries selected. Check config flags or CLI options.")
+
+            LOGGER.info(
+                "Starting dry run | queries=%s | table_prefix=%s",
+                ",".join(spec.name for spec in specs),
+                config["export"]["table_prefix"],
+            )
+            query_counts = dry_run_queries(config, specs)
+            total_rows = sum(query_counts.values())
+            print("✅ Dry run completed. No CSV file was written.")
+            print(f"- Queries checked: {', '.join(spec.name for spec in specs)}")
+            for spec in specs:
+                print(f"- {spec.name}: {query_counts.get(spec.name, 0)} row(s)")
+            print(f"- Total rows: {total_rows}")
+            if total_rows == 0:
+                print("- Warning: all selected queries returned 0 rows.")
+            return 0
+        except Exception as exc:  # pylint: disable=broad-except
+            LOGGER.exception("Dry run failed: %s", exc)
+            print(f"❌ Error: {exc}")
+            return 1
+
     if not args.run:
-        print("❌ Error: choose an action. Use --init, --run, or --diagnose-seo.")
+        print("❌ Error: choose an action. Use --init, --run, --dry-run, --check-connection, or --diagnose-seo.")
         return 2
 
     try:
         config = validate_config(load_config())
-        specs = build_query_specs(config)
-
-        if args.products_only:
-            specs = [spec for spec in specs if spec.name == "products"]
-        if args.categories_only:
-            specs = [spec for spec in specs if spec.name == "categories"]
+        specs = apply_query_filters(build_query_specs(config), args.products_only, args.categories_only)
 
         if not specs:
             raise ValueError("No queries selected. Check config flags or CLI options.")

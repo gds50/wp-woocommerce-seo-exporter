@@ -90,11 +90,20 @@ python seo_exporter.py --run
 python seo_exporter.py --run --products-only
 python seo_exporter.py --run --categories-only
 python seo_exporter.py --run --output=result.csv
+python seo_exporter.py --check-connection
+python seo_exporter.py --dry-run
+python seo_exporter.py --dry-run --products-only
 python seo_exporter.py --diagnose-seo
 python seo_exporter.py --run --verbose
 ```
 
 По умолчанию результат сохраняется в `seo_export.csv`.
+
+Для безопасной проверки перед боевым экспортом доступны отдельные режимы:
+
+- `--check-connection` - проверяет `config.json`, SSH-туннель и подключение к MySQL без выполнения экспортных SQL
+- `--dry-run` - выполняет выбранные export SQL и показывает количество строк без записи CSV
+- `--run` - выполняет полноценный экспорт и сохраняет CSV
 
 ## Make targets
 
@@ -203,6 +212,28 @@ python seo_exporter.py --diagnose-seo
 - встроенный экспорт и диагностика ориентированы на Yoast SEO и Rank Math;
 - `AIOSEO` пока не определяется встроенно;
 - если сайт хранит SEO в `AIOSEO` или в кастомной схеме, следует использовать собственный SQL в `config.json`.
+
+## Safe checks
+
+Проверка соединения без запуска экспортных SQL:
+
+```bash
+python seo_exporter.py --check-connection
+```
+
+Проверка export SQL без записи CSV:
+
+```bash
+python seo_exporter.py --dry-run
+python seo_exporter.py --dry-run --products-only
+```
+
+В `--dry-run` скрипт:
+
+- использует тот же `config.json` и те же query presets / custom SQL;
+- выполняет SQL и валидирует структуру строк;
+- показывает количество строк по каждому выбранному query;
+- не создаёт и не перезаписывает CSV-файл.
 
 ## Документация
 
