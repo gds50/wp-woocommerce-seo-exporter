@@ -3,6 +3,7 @@
 
 # Config with secrets
 config.json
+config.local.json
 
 # Python cache
 __pycache__/
@@ -13,6 +14,9 @@ __pycache__/
 
 # Logs
 *.log
+
+# Export artifacts
+*.csv
 
 # OS files
 .DS_Store

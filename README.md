@@ -1,107 +1,87 @@
-# SEO Exporter для WordPress + WooCommerce + тема Bono
+# SEO Exporter for WordPress + WooCommerce + Bono
 
-Этот проект изначально подготовлен как **открытый Python-скрипт** для сайта на **WordPress + WooCommerce** с темой **Bono**.
+Открытый Python-проект для выгрузки SEO-данных из удаленной базы сайта через SSH.
 
-Назначение скрипта:
-- подключиться к хостингу по SSH;
-- поднять SSH-туннель до MySQL;
-- забрать SEO-данные из БД;
-- сохранить CSV-файл со столбцами:
-  - `entity_type`
-  - `id`
-  - `url`
-  - `seo_title`
-  - `seo_description`
+Проект ориентирован на сайты на базе:
+- WordPress
+- WooCommerce
+- темы Bono
 
-Скрипт уже умеет работать в универсальном режиме через SQL-запросы из `config.json`, а дальнейшая доработка до полноценного продукта должна идти **по milestone-плану**, без разрушения уже работающей базы.
+Скрипт подключается к серверу по SSH, поднимает SSH-туннель к MySQL, выполняет SQL-запросы из `config.json` и сохраняет CSV с фиксированным форматом:
 
----
+```text
+entity_type,id,url,seo_title,seo_description
+```
 
-## Целевой стек
+## Возможности
 
-- **CMS:** WordPress
-- **E-commerce:** WooCommerce
-- **Theme:** Bono
-- **Доступ к данным:** SSH + MySQL
-- **Язык скрипта:** Python 3
-- **Формат выгрузки:** CSV
+- интерактивная инициализация `config.json`
+- подключение к MySQL через SSH-туннель
+- экспорт товаров и категорий
+- сохранение результата в CSV
+- запуск через CLI и `Makefile`
 
----
+## Структура репозитория
 
-## Что считается SEO-данными в этом проекте
-
-На текущем этапе экспортируются:
-- SEO Title
-- SEO Description
-- человекоподобная ссылка страницы в браузере
-- ID сущности для последующего обратного обновления в БД
-
-Поддерживаются 2 типа сущностей:
-- товары (`product`)
-- категории (`category`)
-
----
-
-## Почему проект пока не зашит жёстко под WP/WooCommerce
-
-На WordPress + WooCommerce итоговые SEO-данные часто зависят не только от базовых таблиц WordPress/WooCommerce, но и от SEO-плагина.
-
-Чаще всего встречаются варианты:
-- Yoast SEO
-- Rank Math
-- AIOSEO
-- кастомные поля темы/проекта
-
-Кроме этого, URL товаров и категорий зависят от настроек permalink-структуры WordPress и WooCommerce. WooCommerce отдельно документирует product permalinks и product category taxonomy (`product_cat`). citeturn294537search0turn294537search2
-
-Поэтому текущая реализация сделана безопасно:
-- Python-код универсален;
-- SQL хранится в `config.json`;
-- логику получения данных можно постепенно адаптировать под конкретный WP/WooCommerce/Bono-проект.
-
----
+```text
+.
+├── seo_exporter.py
+├── config.example.json
+├── requirements.txt
+├── Makefile
+├── README.md
+├── CODEX.md
+├── docs/
+└── tests/
+```
 
 ## Установка
 
+Требуется Python 3.
+
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
----
+## Настройка
 
-## Первичная настройка
-
-```bash
-python seo_exporter.py --init
-```
-
-или:
+Создайте локальный конфиг:
 
 ```bash
 make init
 ```
 
-Скрипт создаст `config.json` и добавит его в `.gitignore`.
+Альтернатива без `Makefile`:
 
----
+```bash
+python seo_exporter.py --init
+```
+
+Во время инициализации будет создан `config.json`. Этот файл не должен попадать в Git, потому что содержит параметры доступа.
+
+Для ориентира в репозитории есть шаблон:
+
+```text
+config.example.json
+```
 
 ## Запуск
 
-```bash
-python seo_exporter.py --run
-```
-
-или:
+Основной сценарий:
 
 ```bash
 make run
 ```
 
-По умолчанию результат сохраняется в `seo_export.csv`.
+Альтернатива:
 
----
+```bash
+python seo_exporter.py --run
+```
 
-## Полезные флаги
+Дополнительные примеры:
 
 ```bash
 python seo_exporter.py --run --products-only
@@ -110,57 +90,33 @@ python seo_exporter.py --run --output=result.csv
 python seo_exporter.py --run --verbose
 ```
 
----
+По умолчанию результат сохраняется в `seo_export.csv`.
 
-## Как организовать проект в GitHub
+## Make targets
 
-Подробный план: [`docs/github-repo-plan.md`](docs/github-repo-plan.md)
+- `make init` - интерактивно создать `config.json`
+- `make run` - выполнить экспорт
+- `make test` - проверить синтаксис скрипта
+- `make help` - показать доступные команды
 
-Коротко:
-- репозиторий хранит только код, шаблон конфига, документацию, тесты и milestone-план;
-- `config.json` не коммитится;
-- вся доработка делается через milestone-подход;
-- Codex на сервере идёт по шагам из `docs/production-milestones.md`;
-- существующая рабочая логика не ломается без веской причины.
+## Конфигурация
 
-Рекомендуемая структура:
+Проект не хранит реальные креды в коде. Все параметры подключения выносятся в `config.json`.
 
-```text
-seo-exporter/
-├── seo_exporter.py
-├── config.example.json
-├── requirements.txt
-├── Makefile
-├── README.md
-├── CODEX.md
-├── docs/
-│   ├── github-repo-plan.md
-│   └── production-milestones.md
-└── tests/
-```
+Шаблон `config.example.json` содержит только безопасные примерные значения:
+- SSH host / port / username
+- путь к приватному ключу или SSH password
+- MySQL user / password / database
+- SQL-запросы для товаров и категорий
 
----
+## Документация
 
-## Правила развития проекта
+- [`docs/github-repo-plan.md`](docs/github-repo-plan.md) - подготовка открытого GitHub-репозитория
+- [`docs/production-milestones.md`](docs/production-milestones.md) - поэтапное развитие без поломки текущей базы
+- `CODEX.md` - рабочие правила для дальнейших изменений
 
-1. Сначала milestone.
-2. Потом точечная доработка.
-3. Затем тесты.
-4. Потом commit.
-5. Только после этого следующий milestone.
+## Ограничения
 
-Если архитектурно хочется что-то улучшить, но текущая версия уже работает, изменение переносится в **следующий milestone**, а не ломает текущий.
-
----
-
-## Документы для дальнейшей работы
-
-- `docs/github-repo-plan.md` — как оформить открытый репозиторий на GitHub
-- `docs/production-milestones.md` — как довести проект до production пошагово
-- `CODEX.md` — правила для Codex, чтобы он не ломал уже сделанное
-
----
-
-## Примечание по WordPress / WooCommerce
-
-WooCommerce использует post types и taxonomies, включая `product` и `product_cat`, а permalink-структура настраивается отдельно. Это важно для корректного получения человекоподобных URL товаров и категорий. citeturn294537search0turn294537search2turn294537search5
+- core logic текущего скрипта не должна меняться без отдельного milestone
+- формат CSV должен оставаться стабильным
+- SQL-логика зависит от конкретной структуры WordPress, WooCommerce, Bono и используемого SEO-плагина
