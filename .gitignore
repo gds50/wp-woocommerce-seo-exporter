@@ -1,0 +1,18 @@
+# Virtual environment
+.venv/
+
+# Config with secrets
+config.json
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Pytest
+.pytest_cache/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
