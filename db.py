@@ -193,6 +193,18 @@ WHERE taxonomy = 'product_cat'
 """.strip(),
         ),
         (
+            "theme_product_meta",
+            "Theme/custom product SEO meta",
+            f"""
+SELECT COUNT(DISTINCT pm.post_id) AS matches
+FROM {table_prefix}postmeta AS pm
+INNER JOIN {table_prefix}posts AS p ON p.ID = pm.post_id
+WHERE p.post_type = 'product'
+  AND p.post_status IN ('publish', 'private')
+  AND pm.meta_key IN ('seo_meta_title', 'seo_meta_description')
+""".strip(),
+        ),
+        (
             "yoast_product_meta",
             "Yoast SEO product meta",
             f"""
@@ -214,6 +226,17 @@ INNER JOIN {table_prefix}posts AS p ON p.ID = pm.post_id
 WHERE p.post_type = 'product'
   AND p.post_status IN ('publish', 'private')
   AND pm.meta_key IN ('rank_math_title', 'rank_math_description')
+""".strip(),
+        ),
+        (
+            "theme_category_meta",
+            "Theme/custom category SEO meta",
+            f"""
+SELECT COUNT(DISTINCT tm.term_id) AS matches
+FROM {table_prefix}termmeta AS tm
+INNER JOIN {table_prefix}term_taxonomy AS tt ON tt.term_id = tm.term_id
+WHERE tt.taxonomy = 'product_cat'
+  AND tm.meta_key IN ('seo_meta_title', 'seo_meta_description')
 """.strip(),
         ),
         (
@@ -287,11 +310,13 @@ WHERE tt.taxonomy = 'product_cat'
 
     print("SEO diagnostics")
     print(f"- table_prefix: {table_prefix}")
-    print("- built-in export priority: Yoast SEO -> Rank Math -> WordPress/WooCommerce fallback")
+    print("- built-in export priority: theme/custom seo_meta_* -> Yoast SEO -> Rank Math -> WordPress/WooCommerce fallback")
     print(f"- published/private products: {results['published_products']}")
     print(f"- product categories: {results['product_categories']}")
+    print(f"- theme/custom product SEO meta detected on {results['theme_product_meta']} product(s)")
     print(f"- Yoast SEO product meta detected on {results['yoast_product_meta']} product(s)")
     print(f"- Rank Math product meta detected on {results['rank_math_product_meta']} product(s)")
+    print(f"- theme/custom category SEO meta detected on {results['theme_category_meta']} category record(s)")
     print(f"- Yoast SEO category meta detected on {results['yoast_category_meta']} category record(s)")
     print(f"- Rank Math category meta detected on {results['rank_math_category_meta']} category record(s)")
     print("- AIOSEO is not auto-detected by the built-in export yet; use custom SQL in config.json if your site stores SEO there.")

@@ -129,6 +129,13 @@ def test_build_query_specs_uses_custom_entity_type(valid_config):
     assert specs[0].entity_type == "woo_product"
 
 
+def test_default_sql_templates_include_theme_custom_seo_meta():
+    assert "seo_meta_title" in exporter_module.DEFAULT_PRODUCT_SQL_TEMPLATE
+    assert "seo_meta_description" in exporter_module.DEFAULT_PRODUCT_SQL_TEMPLATE
+    assert "seo_meta_title" in exporter_module.DEFAULT_CATEGORY_SQL_TEMPLATE
+    assert "seo_meta_description" in exporter_module.DEFAULT_CATEGORY_SQL_TEMPLATE
+
+
 def test_write_csv_writes_expected_header_and_rows(tmp_path):
     output_path = tmp_path / "nested" / "result.csv"
     rows = [

@@ -171,12 +171,14 @@ python -m pytest -q
 
 Запросы по умолчанию пытаются заполнить SEO-поля в таком порядке:
 
+- theme / custom `seo_meta_title` + `seo_meta_description`
 - Yoast SEO
 - Rank Math
 - fallback на стандартные поля WordPress / WooCommerce
 
 Это и есть текущая встроенная стратегия выбора источника SEO-данных:
 
+- если для сущности есть `seo_meta_title` / `seo_meta_description`, используется они;
 - если для сущности есть SEO-мета Yoast, используется она;
 - если Yoast-мета нет, проверяется Rank Math;
 - если ни один из этих источников не найден, используются стандартные поля WordPress / WooCommerce;
@@ -222,6 +224,7 @@ python -m pytest -q
 - WordPress
 - WooCommerce
 - тема Bono
+- theme / custom `seo_meta_title` + `seo_meta_description`
 - Yoast SEO
 - Rank Math
 - fallback на стандартные поля WordPress / WooCommerce
@@ -244,12 +247,13 @@ python seo_exporter.py --diagnose-seo
 
 - не записывает CSV;
 - не меняет поведение `--run`;
+- показывает, найдены ли в базе theme/custom поля `seo_meta_title` и `seo_meta_description`;
 - показывает, найдены ли в базе типовые SEO meta keys для Yoast SEO и Rank Math;
 - показывает базовое количество товаров и товарных категорий для проверки структуры WooCommerce.
 
 Ограничения:
 
-- встроенный экспорт и диагностика ориентированы на Yoast SEO и Rank Math;
+- встроенный экспорт и диагностика ориентированы на theme/custom `seo_meta_*`, Yoast SEO и Rank Math;
 - `AIOSEO` пока не определяется встроенно;
 - если сайт хранит SEO в `AIOSEO` или в кастомной схеме, следует использовать собственный SQL в `config.json`.
 

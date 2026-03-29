@@ -15,11 +15,13 @@ SELECT
     p.ID AS id,
     CONCAT('product/', p.post_name, '/') AS url,
     COALESCE(
+        NULLIF(MAX(CASE WHEN pm.meta_key = 'seo_meta_title' THEN pm.meta_value END), ''),
         NULLIF(MAX(CASE WHEN pm.meta_key = '_yoast_wpseo_title' THEN pm.meta_value END), ''),
         NULLIF(MAX(CASE WHEN pm.meta_key = 'rank_math_title' THEN pm.meta_value END), ''),
         p.post_title
     ) AS seo_title,
     COALESCE(
+        NULLIF(MAX(CASE WHEN pm.meta_key = 'seo_meta_description' THEN pm.meta_value END), ''),
         NULLIF(MAX(CASE WHEN pm.meta_key = '_yoast_wpseo_metadesc' THEN pm.meta_value END), ''),
         NULLIF(MAX(CASE WHEN pm.meta_key = 'rank_math_description' THEN pm.meta_value END), ''),
         NULLIF(p.post_excerpt, ''),
@@ -39,11 +41,13 @@ SELECT
     t.term_id AS id,
     CONCAT('product-category/', t.slug, '/') AS url,
     COALESCE(
+        NULLIF(MAX(CASE WHEN tm.meta_key = 'seo_meta_title' THEN tm.meta_value END), ''),
         NULLIF(MAX(CASE WHEN tm.meta_key = '_yoast_wpseo_title' THEN tm.meta_value END), ''),
         NULLIF(MAX(CASE WHEN tm.meta_key = 'rank_math_title' THEN tm.meta_value END), ''),
         t.name
     ) AS seo_title,
     COALESCE(
+        NULLIF(MAX(CASE WHEN tm.meta_key = 'seo_meta_description' THEN tm.meta_value END), ''),
         NULLIF(MAX(CASE WHEN tm.meta_key = '_yoast_wpseo_metadesc' THEN tm.meta_value END), ''),
         NULLIF(MAX(CASE WHEN tm.meta_key = 'rank_math_description' THEN tm.meta_value END), ''),
         NULLIF(tt.description, ''),
