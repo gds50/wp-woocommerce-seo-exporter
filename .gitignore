@@ -17,6 +17,7 @@ __pycache__/
 
 # Export artifacts
 *.csv
+dist/
 
 # OS files
 .DS_Store

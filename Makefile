@@ -1,4 +1,4 @@
-.PHONY: init run test clean help
+.PHONY: init run test release-bundle clean help
 
 init: ## Первоначальная настройка проекта (Initial project setup)
 	@python seo_exporter.py --init
@@ -7,8 +7,11 @@ run: ## Запуск экспорта SEO в CSV (Run SEO export to CSV)
 	@python seo_exporter.py --run $(ARGS)
 
 test: ## Запуск unit-тестов и базовой проверки синтаксиса (Run unit tests and syntax check)
-	@python -m py_compile seo_exporter.py cli.py config.py db.py exporter.py
+	@python -m py_compile seo_exporter.py cli.py config.py db.py exporter.py scripts/build_release_bundle.py
 	@python -m pytest -q
+
+release-bundle: ## Собрать clean release bundle в dist/ (Build clean release bundle in dist/)
+	@python scripts/build_release_bundle.py --version=v1.0.0-rc1
 
 clean: ## Очистка временных файлов (Clean temporary files)
 	@find . -type d -name "__pycache__" -exec rm -rf {} +

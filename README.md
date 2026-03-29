@@ -42,6 +42,8 @@ entity_type,id,url,seo_title,seo_description
 
 Точка входа CLI остаётся прежней: `python seo_exporter.py ...`
 
+Важно: этот репозиторий остаётся source-репозиторием для разработки. Clean пакет для конечного пользователя, без `tests/`, `docs/`, `CODEX.md` и других внутренних файлов, будет оформлен как отдельный release bundle на этапе `Milestone 9`.
+
 ## Установка
 
 Требуется Python 3.
@@ -129,6 +131,7 @@ python seo_exporter.py --run --verbose
 - `make init` - интерактивно создать `config.json`
 - `make run` - выполнить экспорт
 - `make test` - запустить unit-тесты и базовую проверку синтаксиса
+- `make release-bundle` - собрать clean release bundle в `dist/`
 - `make help` - показать доступные команды
 
 ## Тесты
@@ -254,6 +257,36 @@ python seo_exporter.py --dry-run --products-only
 - показывает количество строк по каждому выбранному query;
 - не создаёт и не перезаписывает CSV-файл.
 
+## Release bundle
+
+Для конечного пользователя clean пакет будет публиковаться как отдельный release asset, а не как source archive репозитория.
+
+Что входит в bundle:
+
+- `seo_exporter.py`
+- `cli.py`
+- `config.py`
+- `db.py`
+- `exporter.py`
+- `requirements.txt`
+- `config.example.json`
+- отдельный короткий `README.md`
+
+Что не входит в bundle:
+
+- `tests/`
+- `docs/`
+- `CODEX.md`
+- локальные артефакты разработки
+
+Локально собрать release bundle можно так:
+
+```bash
+make release-bundle
+```
+
+После сборки артефакты появятся в `dist/`.
+
 ## FAQ
 
 **`config.json` не найден. Что делать?**
@@ -284,6 +317,7 @@ python seo_exporter.py --dry-run --products-only
 
 - [`docs/github-repo-plan.md`](docs/github-repo-plan.md) - подготовка открытого GitHub-репозитория
 - [`docs/production-milestones.md`](docs/production-milestones.md) - поэтапное развитие без поломки текущей базы
+- [`CHANGELOG.md`](CHANGELOG.md) - изменения для release candidate и дальнейших релизов
 - `CODEX.md` - рабочие правила для дальнейших изменений
 
 ## Ограничения
