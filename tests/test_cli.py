@@ -79,6 +79,20 @@ def test_parse_args_parses_action_flags(monkeypatch, argv, expected):
     assert args.run is False
 
 
+def test_help_includes_examples_and_mode_descriptions(monkeypatch, capsys):
+    monkeypatch.setattr("sys.argv", ["seo_exporter.py", "--help"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli_module.parse_args()
+
+    output = capsys.readouterr().out
+    assert exc_info.value.code == 0
+    assert "Export WooCommerce SEO data" in output
+    assert "Examples:" in output
+    assert "--check-connection" in output
+    assert "--dry-run --products-only" in output
+
+
 def test_main_returns_error_when_no_action_is_selected(monkeypatch, capsys):
     monkeypatch.setattr(cli_module, "parse_args", lambda: make_args())
     monkeypatch.setattr(cli_module, "setup_logging", lambda verbose: None)
@@ -86,7 +100,7 @@ def test_main_returns_error_when_no_action_is_selected(monkeypatch, capsys):
     result = cli_module.main()
 
     assert result == 2
-    assert "Use --init, --run, --dry-run, --check-connection, or --diagnose-seo" in capsys.readouterr().out
+    assert "no action selected" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -101,9 +115,11 @@ def test_main_rejects_conflicting_actions(monkeypatch, capsys, arg_overrides, ex
     monkeypatch.setattr(cli_module, "setup_logging", lambda verbose: None)
 
     result = cli_module.main()
+    output = capsys.readouterr().out
 
     assert result == 2
-    assert expected_fragment in capsys.readouterr().out
+    assert "choose only one primary action" in output
+    assert expected_fragment in output
 
 
 @pytest.mark.parametrize(
@@ -184,7 +200,7 @@ def test_main_runs_connection_check_without_export(monkeypatch, capsys):
 
     assert result == 0
     assert calls["check"] == 1
-    assert "Connection check passed" in capsys.readouterr().out
+    assert "config, SSH tunnel, and MySQL access look OK" in capsys.readouterr().out
 
 
 def test_main_runs_dry_run_without_writing_csv(monkeypatch, capsys):
@@ -217,7 +233,7 @@ def test_main_runs_dry_run_without_writing_csv(monkeypatch, capsys):
     output = capsys.readouterr().out
     assert result == 0
     assert observed["spec_names"] == ["products"]
-    assert "Dry run completed" in output
+    assert "Dry run completed successfully" in output
     assert "products: 12 row(s)" in output
     assert "Total rows: 12" in output
 
@@ -230,3 +246,18 @@ def test_load_config_exits_when_config_file_is_missing(monkeypatch, tmp_path, ca
 
     assert exc_info.value.code == 1
     assert "config.json not found" in capsys.readouterr().out
+
+
+def test_main_reports_no_queries_selected_with_actionable_message(monkeypatch, capsys):
+    config = config_module.validate_config(copy.deepcopy(make_config()))
+
+    monkeypatch.setattr(cli_module, "parse_args", lambda: make_args(run=True))
+    monkeypatch.setattr(cli_module, "setup_logging", lambda verbose: None)
+    monkeypatch.setattr(cli_module, "load_config", lambda: copy.deepcopy(config))
+    monkeypatch.setattr(cli_module, "validate_config", lambda cfg: cfg)
+    monkeypatch.setattr(cli_module, "build_query_specs", lambda cfg: [])
+
+    result = cli_module.main()
+
+    assert result == 1
+    assert "Enable products or categories in config.json" in capsys.readouterr().out

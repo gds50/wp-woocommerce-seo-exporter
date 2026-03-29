@@ -136,7 +136,7 @@ def write_csv(rows: List[Dict[str, str]], output_path: Path) -> None:
             writer.writerows(rows)
         LOGGER.info("CSV file written successfully: %s", output_path)
     except (OSError, csv.Error) as exc:
-        raise RuntimeError(f"Failed to write CSV file: {output_path}") from exc
+        raise RuntimeError(f"Failed to write CSV file: {output_path}. Check directory permissions and file locks.") from exc
 
 
 def apply_query_filters(specs: List[QuerySpec], products_only: bool, categories_only: bool) -> List[QuerySpec]:

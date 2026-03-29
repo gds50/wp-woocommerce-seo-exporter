@@ -113,17 +113,26 @@ def init_config() -> None:
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Export SEO title and description from a remote MySQL database over SSH to CSV.",
+        description="Export WooCommerce SEO data from a remote WordPress database over SSH to CSV.",
+        epilog=(
+            "Examples:\n"
+            "  python seo_exporter.py --init\n"
+            "  python seo_exporter.py --check-connection\n"
+            "  python seo_exporter.py --dry-run --products-only\n"
+            "  python seo_exporter.py --run --output=result.csv\n"
+            "  python seo_exporter.py --diagnose-seo"
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
     )
-    parser.add_argument("--init", action="store_true", help="Initialize config.json interactively.")
-    parser.add_argument("--run", action="store_true", help="Run export using config.json.")
-    parser.add_argument("--dry-run", action="store_true", help="Run export queries and count rows without writing CSV.")
-    parser.add_argument("--check-connection", action="store_true", help="Check config, SSH tunnel, and MySQL connectivity without running export SQL.")
-    parser.add_argument("--diagnose-seo", action="store_true", help="Detect which built-in SEO sources are present in the database.")
-    parser.add_argument("--output", help="Override output CSV file path.")
-    parser.add_argument("--products-only", action="store_true", help="Export only product rows.")
-    parser.add_argument("--categories-only", action="store_true", help="Export only category rows.")
-    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging.")
+    parser.add_argument("--init", action="store_true", help="Create config.json interactively and verify SSH/MySQL access.")
+    parser.add_argument("--run", action="store_true", help="Run the full export and write the CSV file.")
+    parser.add_argument("--dry-run", action="store_true", help="Run export SQL and show row counts without writing CSV.")
+    parser.add_argument("--check-connection", action="store_true", help="Validate config, SSH tunnel, and MySQL access without running export SQL.")
+    parser.add_argument("--diagnose-seo", action="store_true", help="Inspect built-in Yoast/Rank Math SEO sources in the database.")
+    parser.add_argument("--output", help="Override the output CSV path for --run.")
+    parser.add_argument("--products-only", action="store_true", help="Limit --run or --dry-run to product queries.")
+    parser.add_argument("--categories-only", action="store_true", help="Limit --run or --dry-run to category queries.")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging for troubleshooting.")
     return parser.parse_args()
 
 
@@ -147,7 +156,11 @@ def main() -> int:
         selected_actions.append("--diagnose-seo")
 
     if len(selected_actions) > 1:
-        print(f"❌ Error: choose one action. Conflicting options: {', '.join(selected_actions)}")
+        print(
+            "❌ Error: choose only one primary action "
+            f"(--init, --run, --dry-run, --check-connection, or --diagnose-seo). "
+            f"Conflicting options: {', '.join(selected_actions)}"
+        )
         return 2
 
     if args.check_connection:
@@ -155,7 +168,7 @@ def main() -> int:
             config = validate_config(load_config())
             LOGGER.info("Starting connection check.")
             test_connection(config)
-            print("✅ Connection check passed: SSH tunnel and MySQL access are working.")
+            print("✅ Connection check passed: config, SSH tunnel, and MySQL access look OK.")
             return 0
         except Exception as exc:  # pylint: disable=broad-except
             LOGGER.exception("Connection check failed: %s", exc)
@@ -178,7 +191,10 @@ def main() -> int:
             specs = apply_query_filters(build_query_specs(config), args.products_only, args.categories_only)
 
             if not specs:
-                raise ValueError("No queries selected. Check config flags or CLI options.")
+                raise ValueError(
+                    "No queries selected. Enable products or categories in config.json, "
+                    "or remove conflicting CLI filters."
+                )
 
             LOGGER.info(
                 "Starting dry run | queries=%s | table_prefix=%s",
@@ -187,7 +203,7 @@ def main() -> int:
             )
             query_counts = dry_run_queries(config, specs)
             total_rows = sum(query_counts.values())
-            print("✅ Dry run completed. No CSV file was written.")
+            print("✅ Dry run completed successfully. No CSV file was written.")
             print(f"- Queries checked: {', '.join(spec.name for spec in specs)}")
             for spec in specs:
                 print(f"- {spec.name}: {query_counts.get(spec.name, 0)} row(s)")
@@ -201,7 +217,10 @@ def main() -> int:
             return 1
 
     if not args.run:
-        print("❌ Error: choose an action. Use --init, --run, --dry-run, --check-connection, or --diagnose-seo.")
+        print(
+            "❌ Error: no action selected. Use --init, --run, --dry-run, --check-connection, "
+            "--diagnose-seo, or see --help."
+        )
         return 2
 
     try:
@@ -209,7 +228,10 @@ def main() -> int:
         specs = apply_query_filters(build_query_specs(config), args.products_only, args.categories_only)
 
         if not specs:
-            raise ValueError("No queries selected. Check config flags or CLI options.")
+            raise ValueError(
+                "No queries selected. Enable products or categories in config.json, "
+                "or remove conflicting CLI filters."
+            )
 
         output = Path(args.output or config["export"].get("output_csv", DEFAULT_OUTPUT))
         LOGGER.info(
@@ -224,7 +246,7 @@ def main() -> int:
             LOGGER.warning("No rows were returned by the selected queries. Writing header-only CSV.")
         write_csv(rows, output)
         LOGGER.info("Export finished successfully. Total row(s) processed: %s", len(rows))
-        print(f"✅ Export completed: {len(rows)} rows saved to {output}")
+        print(f"✅ Export completed: {len(rows)} row(s) saved to {output}")
         return 0
     except Exception as exc:  # pylint: disable=broad-except
         LOGGER.exception("Export failed: %s", exc)

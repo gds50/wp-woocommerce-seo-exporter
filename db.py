@@ -61,7 +61,9 @@ def fetch_rows(config: Dict[str, Any], specs: Iterable[QuerySpec]) -> List[Dict[
                     autocommit=True,
                 )
             except pymysql.MySQLError as exc:
-                raise RuntimeError("Database connection failed. Check MySQL credentials, database name, and tunnel settings.") from exc
+                raise RuntimeError(
+                    "Database connection failed. Check MySQL credentials, database name, charset, and SSH tunnel settings."
+                ) from exc
 
             try:
                 with connection.cursor() as cursor:
@@ -71,7 +73,9 @@ def fetch_rows(config: Dict[str, Any], specs: Iterable[QuerySpec]) -> List[Dict[
                             cursor.execute(spec.sql)
                             result = cursor.fetchall()
                         except pymysql.MySQLError as exc:
-                            raise RuntimeError(f"SQL query failed for '{spec.name}'. Check the configured SQL and database structure.") from exc
+                            raise RuntimeError(
+                                f"SQL query failed for '{spec.name}'. Check the configured SQL, table_prefix, and database structure."
+                            ) from exc
 
                         if not result:
                             LOGGER.warning("Query '%s' returned 0 rows.", spec.name)
@@ -84,9 +88,11 @@ def fetch_rows(config: Dict[str, Any], specs: Iterable[QuerySpec]) -> List[Dict[
                 connection.close()
                 LOGGER.info("Database connection closed.")
     except BaseSSHTunnelForwarderError as exc:
-        raise RuntimeError("SSH tunnel connection failed. Check SSH host, port, credentials, and remote MySQL bind settings.") from exc
+        raise RuntimeError(
+            "SSH tunnel connection failed. Check SSH host, port, credentials, and remote MySQL bind settings."
+        ) from exc
     except OSError as exc:
-        raise RuntimeError("SSH connection failed due to a network or socket error.") from exc
+        raise RuntimeError("SSH connection failed due to a network or socket error. Verify host reachability and SSH access.") from exc
 
     return rows
 
@@ -124,7 +130,9 @@ def dry_run_queries(config: Dict[str, Any], specs: Iterable[QuerySpec]) -> Dict[
                     autocommit=True,
                 )
             except pymysql.MySQLError as exc:
-                raise RuntimeError("Database connection failed. Check MySQL credentials, database name, and tunnel settings.") from exc
+                raise RuntimeError(
+                    "Database connection failed. Check MySQL credentials, database name, charset, and SSH tunnel settings."
+                ) from exc
 
             try:
                 with connection.cursor() as cursor:
@@ -134,7 +142,9 @@ def dry_run_queries(config: Dict[str, Any], specs: Iterable[QuerySpec]) -> Dict[
                             cursor.execute(spec.sql)
                             result = cursor.fetchall()
                         except pymysql.MySQLError as exc:
-                            raise RuntimeError(f"SQL query failed for '{spec.name}'. Check the configured SQL and database structure.") from exc
+                            raise RuntimeError(
+                                f"SQL query failed for '{spec.name}'. Check the configured SQL, table_prefix, and database structure."
+                            ) from exc
 
                         query_counts[spec.name] = len(result)
                         if not result:
@@ -147,9 +157,11 @@ def dry_run_queries(config: Dict[str, Any], specs: Iterable[QuerySpec]) -> Dict[
                 connection.close()
                 LOGGER.info("Database connection closed.")
     except BaseSSHTunnelForwarderError as exc:
-        raise RuntimeError("SSH tunnel connection failed. Check SSH host, port, credentials, and remote MySQL bind settings.") from exc
+        raise RuntimeError(
+            "SSH tunnel connection failed. Check SSH host, port, credentials, and remote MySQL bind settings."
+        ) from exc
     except OSError as exc:
-        raise RuntimeError("SSH connection failed due to a network or socket error.") from exc
+        raise RuntimeError("SSH connection failed due to a network or socket error. Verify host reachability and SSH access.") from exc
 
     return query_counts
 
@@ -247,7 +259,9 @@ WHERE tt.taxonomy = 'product_cat'
                     autocommit=True,
                 )
             except pymysql.MySQLError as exc:
-                raise RuntimeError("Database connection failed. Check MySQL credentials, database name, and tunnel settings.") from exc
+                raise RuntimeError(
+                    "Database connection failed. Check MySQL credentials, database name, charset, and SSH tunnel settings."
+                ) from exc
 
             try:
                 with connection.cursor() as cursor:
@@ -265,9 +279,11 @@ WHERE tt.taxonomy = 'product_cat'
                 connection.close()
                 LOGGER.info("Database connection closed.")
     except BaseSSHTunnelForwarderError as exc:
-        raise RuntimeError("SSH tunnel connection failed. Check SSH host, port, credentials, and remote MySQL bind settings.") from exc
+        raise RuntimeError(
+            "SSH tunnel connection failed. Check SSH host, port, credentials, and remote MySQL bind settings."
+        ) from exc
     except OSError as exc:
-        raise RuntimeError("SSH connection failed due to a network or socket error.") from exc
+        raise RuntimeError("SSH connection failed due to a network or socket error. Verify host reachability and SSH access.") from exc
 
     print("SEO diagnostics")
     print(f"- table_prefix: {table_prefix}")

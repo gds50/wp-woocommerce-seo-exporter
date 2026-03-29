@@ -172,7 +172,7 @@ def write_example_config() -> None:
 def load_config() -> Dict[str, Any]:
     """Load configuration from config.json."""
     if not CONFIG_PATH.exists():
-        print("❌ Error: config.json not found. Run: python seo_exporter.py --init")
+        print("❌ Error: config.json not found in the current directory. Run: python seo_exporter.py --init")
         sys.exit(1)
 
     with CONFIG_PATH.open("r", encoding="utf-8") as handle:

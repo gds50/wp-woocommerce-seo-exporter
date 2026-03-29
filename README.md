@@ -78,27 +78,34 @@ config.example.json
 
 ## Запуск
 
-Основной сценарий:
+### Первый запуск
 
 ```bash
-make run
+make init
+python seo_exporter.py --check-connection
+python seo_exporter.py --dry-run
 ```
 
-Альтернатива:
+### Боевой экспорт
 
 ```bash
 python seo_exporter.py --run
+python seo_exporter.py --run --output=result.csv
 ```
 
-Дополнительные примеры:
+### Частичные выгрузки
 
 ```bash
 python seo_exporter.py --run --products-only
 python seo_exporter.py --run --categories-only
-python seo_exporter.py --run --output=result.csv
-python seo_exporter.py --check-connection
-python seo_exporter.py --dry-run
 python seo_exporter.py --dry-run --products-only
+python seo_exporter.py --dry-run --categories-only
+```
+
+### Диагностика
+
+```bash
+python seo_exporter.py --check-connection
 python seo_exporter.py --diagnose-seo
 python seo_exporter.py --run --verbose
 ```
@@ -110,6 +117,12 @@ python seo_exporter.py --run --verbose
 - `--check-connection` - проверяет `config.json`, SSH-туннель и подключение к MySQL без выполнения экспортных SQL
 - `--dry-run` - выполняет выбранные export SQL и показывает количество строк без записи CSV
 - `--run` - выполняет полноценный экспорт и сохраняет CSV
+
+Подсказка по выбору режима:
+
+- начни с `--check-connection`, если не уверен в SSH или MySQL-доступе;
+- переходи к `--dry-run`, если соединение уже есть и нужно проверить SQL;
+- используй `--run`, только когда соединение и SQL уже подтверждены.
 
 ## Make targets
 
@@ -240,6 +253,32 @@ python seo_exporter.py --dry-run --products-only
 - выполняет SQL и валидирует структуру строк;
 - показывает количество строк по каждому выбранному query;
 - не создаёт и не перезаписывает CSV-файл.
+
+## FAQ
+
+**`config.json` не найден. Что делать?**
+
+Создай конфиг через `python seo_exporter.py --init` или `make init`, затем повтори запуск.
+
+**Когда использовать `--check-connection`, а когда `--dry-run`?**
+
+`--check-connection` нужен для проверки SSH и MySQL-доступа. `--dry-run` нужен, когда соединение уже работает и нужно проверить сами export SQL без записи CSV.
+
+**Почему CSV получился пустым или только с заголовком?**
+
+Это значит, что выбранные SQL не вернули строк. Сначала проверь `--dry-run`, затем проверь filters `--products-only/--categories-only`, `table_prefix` и сами SQL в `config.json`.
+
+**Что делать, если на сайте нестандартный prefix таблиц?**
+
+Укажи правильный `export.table_prefix` в `config.json`, например `wp2_` вместо `wp_`.
+
+**Что делать, если SEO хранится не в Yoast SEO и не в Rank Math?**
+
+Встроенные presets и диагностика ориентированы на Yoast SEO и Rank Math. Для другой схемы хранения используй собственные SQL в `export.queries.products.sql` и `export.queries.categories.sql`.
+
+**Как понять, проблема в SSH, MySQL или SQL?**
+
+Начни с `--check-connection`. Если он проходит, но `--dry-run` падает, проблема обычно уже в SQL, `table_prefix` или структуре таблиц.
 
 ## Документация
 

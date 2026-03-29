@@ -105,7 +105,7 @@ def test_main_run_writes_csv_with_real_writer(monkeypatch, tmp_path, capsys):
     assert content[0] == "entity_type;id;url;seo_title;seo_description"
     assert "product;101;https://example.com/product/item-101/;Product 101;Description 101" in content[1:]
     assert "category;5;https://example.com/product-category/cat-5/;Category 5;Category description 5" in content[1:]
-    assert "Export completed: 2 rows saved to" in capsys.readouterr().out
+    assert "Export completed: 2 row(s) saved to" in capsys.readouterr().out
 
 
 def test_main_run_products_only_passes_only_product_query(monkeypatch, tmp_path):
@@ -175,7 +175,7 @@ def test_main_run_writes_header_only_csv_when_no_rows_returned(monkeypatch, tmp_
     assert result == 0
     assert output_path.exists()
     assert output_path.read_text(encoding="utf-8-sig").splitlines() == ["entity_type;id;url;seo_title;seo_description"]
-    assert "Export completed: 0 rows saved to" in capsys.readouterr().out
+    assert "Export completed: 0 row(s) saved to" in capsys.readouterr().out
 
 
 def test_main_dry_run_skips_csv_and_prints_counts(monkeypatch, tmp_path, capsys):
@@ -198,7 +198,7 @@ def test_main_dry_run_skips_csv_and_prints_counts(monkeypatch, tmp_path, capsys)
     assert result == 0
     assert observed["spec_names"] == ["products", "categories"]
     assert not output_path.exists()
-    assert "Dry run completed" in output
+    assert "Dry run completed successfully" in output
     assert "products: 7 row(s)" in output
     assert "categories: 3 row(s)" in output
     assert "Total rows: 10" in output
@@ -225,7 +225,7 @@ def test_main_check_connection_skips_export_and_csv(monkeypatch, tmp_path, capsy
 
     assert result == 0
     assert observed["checks"] == 1
-    assert "Connection check passed" in capsys.readouterr().out
+    assert "config, SSH tunnel, and MySQL access look OK" in capsys.readouterr().out
 
 
 def test_main_run_returns_error_when_export_pipeline_fails(monkeypatch, tmp_path, capsys):
