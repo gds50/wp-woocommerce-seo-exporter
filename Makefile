@@ -1,3 +1,5 @@
+VERSION ?= v1.0.0
+
 .PHONY: init run test release-bundle clean help
 
 init: ## Первоначальная настройка проекта (Initial project setup)
@@ -11,7 +13,7 @@ test: ## Запуск unit-тестов и базовой проверки си�
 	@python -m pytest -q
 
 release-bundle: ## Собрать clean release bundle в dist/ (Build clean release bundle in dist/)
-	@python scripts/build_release_bundle.py --version=v1.0.0-rc1
+	@python scripts/build_release_bundle.py --version=$(VERSION)
 
 clean: ## Очистка временных файлов (Clean temporary files)
 	@find . -type d -name "__pycache__" -exec rm -rf {} +

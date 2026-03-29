@@ -42,7 +42,7 @@ entity_type,id,url,seo_title,seo_description
 
 Точка входа CLI остаётся прежней: `python seo_exporter.py ...`
 
-Важно: этот репозиторий остаётся source-репозиторием для разработки. Clean пакет для конечного пользователя, без `tests/`, `docs/`, `CODEX.md` и других внутренних файлов, будет оформлен как отдельный release bundle на этапе `Milestone 9`.
+Важно: этот репозиторий остаётся source-репозиторием для разработки. Для конечного пользователя публикуется отдельный clean release bundle без `tests/`, `docs/`, `CODEX.md` и других внутренних файлов разработки.
 
 ## Установка
 
@@ -214,6 +214,24 @@ python -m pytest -q
 - корректность `export.table_prefix`
 - корректность структуры `export.queries`
 
+## Compatibility
+
+Стабильная версия `v1.0.0` ориентирована на следующий совместимый сценарий:
+
+- Python 3.x
+- WordPress
+- WooCommerce
+- тема Bono
+- Yoast SEO
+- Rank Math
+- fallback на стандартные поля WordPress / WooCommerce
+
+CSV-формат считается зафиксированным:
+
+```text
+entity_type,id,url,seo_title,seo_description
+```
+
 ## SEO diagnostics
 
 Для безопасной проверки источников SEO перед экспортом можно использовать:
@@ -259,7 +277,7 @@ python seo_exporter.py --dry-run --products-only
 
 ## Release bundle
 
-Для конечного пользователя clean пакет будет публиковаться как отдельный release asset, а не как source archive репозитория.
+Для конечного пользователя clean пакет публикуется как отдельный release asset, а не как source archive репозитория.
 
 Что входит в bundle:
 
@@ -286,6 +304,19 @@ make release-bundle
 ```
 
 После сборки артефакты появятся в `dist/`.
+
+При необходимости можно передать версию явно:
+
+```bash
+make release-bundle VERSION=v1.0.0
+```
+
+## Roadmap v1.1+
+
+- добавить встроенную поддержку дополнительных SEO-хранилищ, включая AIOSEO
+- улучшить работу с нестандартными permalink bases
+- доработать автоматизацию публикации release bundle
+- расширить диагностику нестандартных WordPress / WooCommerce схем
 
 ## FAQ
 

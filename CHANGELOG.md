@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.0.0 - 2026-03-29
+
+First stable open-source release.
+
+### Stable release notes
+
+- based on the verified `v1.0.0-rc1` release candidate
+- runtime CLI contract is fixed for `--init`, `--run`, `--dry-run`, `--check-connection`, and `--diagnose-seo`
+- CSV export format is stable:
+  `entity_type,id,url,seo_title,seo_description`
+- clean release bundle remains the supported distribution format for end users
+
+### Compatibility
+
+- Python 3.x
+- WordPress
+- WooCommerce
+- Bono theme
+- Yoast SEO
+- Rank Math
+- fallback to standard WordPress / WooCommerce fields
+
+### Roadmap for v1.1+
+
+- add built-in support for more SEO storages such as AIOSEO
+- improve handling of custom permalink bases
+- refine release automation around bundle publishing
+- expand diagnostics for non-standard WordPress / WooCommerce schemas
+
 ## v1.0.0-rc1 - 2026-03-29
 
 First public release candidate.
