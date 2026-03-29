@@ -18,6 +18,7 @@ entity_type,id,url,seo_title,seo_description
 - интерактивная инициализация `config.json`
 - подключение к MySQL через SSH-туннель
 - экспорт товаров и категорий
+- диагностика доступных SEO-источников перед экспортом
 - сохранение результата в CSV
 - запуск через CLI и `Makefile`
 
@@ -89,6 +90,7 @@ python seo_exporter.py --run
 python seo_exporter.py --run --products-only
 python seo_exporter.py --run --categories-only
 python seo_exporter.py --run --output=result.csv
+python seo_exporter.py --diagnose-seo
 python seo_exporter.py --run --verbose
 ```
 
@@ -128,6 +130,13 @@ python seo_exporter.py --run --verbose
 - Rank Math
 - fallback на стандартные поля WordPress / WooCommerce
 
+Это и есть текущая встроенная стратегия выбора источника SEO-данных:
+
+- если для сущности есть SEO-мета Yoast, используется она;
+- если Yoast-мета нет, проверяется Rank Math;
+- если ни один из этих источников не найден, используются стандартные поля WordPress / WooCommerce;
+- если сайт хранит SEO в другой схеме, нужно задать свой SQL в `config.json`.
+
 Что именно считается fallback:
 
 - для товаров: `post_excerpt`, затем `post_content`, затем `post_title`
@@ -159,6 +168,27 @@ python seo_exporter.py --run --verbose
 - обязательные ключи подключения и `export.base_url`
 - корректность `export.table_prefix`
 - корректность структуры `export.queries`
+
+## SEO diagnostics
+
+Для безопасной проверки источников SEO перед экспортом можно использовать:
+
+```bash
+python seo_exporter.py --diagnose-seo
+```
+
+Этот режим:
+
+- не записывает CSV;
+- не меняет поведение `--run`;
+- показывает, найдены ли в базе типовые SEO meta keys для Yoast SEO и Rank Math;
+- показывает базовое количество товаров и товарных категорий для проверки структуры WooCommerce.
+
+Ограничения:
+
+- встроенный экспорт и диагностика ориентированы на Yoast SEO и Rank Math;
+- `AIOSEO` пока не определяется встроенно;
+- если сайт хранит SEO в `AIOSEO` или в кастомной схеме, следует использовать собственный SQL в `config.json`.
 
 ## Документация
 

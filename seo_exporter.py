@@ -417,12 +417,144 @@ def fetch_rows(config: Dict[str, Any], specs: Iterable[QuerySpec]) -> List[Dict[
     ssh_cfg = config["ssh"]
     db_cfg = config["database"]
     base_url = config["export"]["base_url"].rstrip("/")
+    spec_list = list(specs)
     rows: List[Dict[str, str]] = []
 
     tunnel_kwargs = get_tunnel_kwargs(config)
     gateway = (ssh_cfg["host"], int(ssh_cfg["port"]))
 
     try:
+        LOGGER.info("Opening SSH tunnel for %s query(s).", len(spec_list))
+        with SSHTunnelForwarder(gateway, **tunnel_kwargs) as tunnel:
+            try:
+                LOGGER.info("Connecting to database through SSH tunnel.")
+                connection = pymysql.connect(
+                    host="127.0.0.1",
+                    port=tunnel.local_bind_port,
+                    user=db_cfg["user"],
+                    password=db_cfg["password"],
+                    database=db_cfg["name"],
+                    charset=db_cfg.get("charset", "utf8mb4"),
+                    cursorclass=DictCursor,
+                    autocommit=True,
+                )
+            except pymysql.MySQLError as exc:
+                raise RuntimeError("Database connection failed. Check MySQL credentials, database name, and tunnel settings.") from exc
+
+            try:
+                with connection.cursor() as cursor:
+                    for spec in spec_list:
+                        LOGGER.info("Running query: %s", spec.name)
+                        try:
+                            cursor.execute(spec.sql)
+                            result = cursor.fetchall()
+                        except pymysql.MySQLError as exc:
+                            raise RuntimeError(f"SQL query failed for '{spec.name}'. Check the configured SQL and database structure.") from exc
+
+                        if not result:
+                            LOGGER.warning("Query '%s' returned 0 rows.", spec.name)
+                            continue
+
+                        LOGGER.info("Fetched %s row(s) for %s", len(result), spec.name)
+                        for row in result:
+                            rows.append(validate_row(row, spec.entity_type, base_url))
+            finally:
+                connection.close()
+                LOGGER.info("Database connection closed.")
+    except BaseSSHTunnelForwarderError as exc:
+        raise RuntimeError("SSH tunnel connection failed. Check SSH host, port, credentials, and remote MySQL bind settings.") from exc
+    except OSError as exc:
+        raise RuntimeError("SSH connection failed due to a network or socket error.") from exc
+
+    return rows
+
+
+def test_connection(config: Dict[str, Any]) -> None:
+    """Test SSH tunnel and DB connectivity."""
+    test_spec = QuerySpec(name="healthcheck", sql="SELECT 1 AS id, '' AS url, '' AS seo_title, '' AS seo_description", entity_type="healthcheck")
+    fetch_rows(config, [test_spec])
+
+
+def diagnose_seo_sources(config: Dict[str, Any]) -> None:
+    """Inspect common WooCommerce SEO meta storages without exporting CSV."""
+    ssh_cfg = config["ssh"]
+    db_cfg = config["database"]
+    table_prefix = config["export"]["table_prefix"]
+
+    diagnostic_queries = [
+        (
+            "published_products",
+            "Published/private products",
+            f"""
+SELECT COUNT(*) AS matches
+FROM {table_prefix}posts
+WHERE post_type = 'product'
+  AND post_status IN ('publish', 'private')
+""".strip(),
+        ),
+        (
+            "product_categories",
+            "Product categories",
+            f"""
+SELECT COUNT(*) AS matches
+FROM {table_prefix}term_taxonomy
+WHERE taxonomy = 'product_cat'
+""".strip(),
+        ),
+        (
+            "yoast_product_meta",
+            "Yoast SEO product meta",
+            f"""
+SELECT COUNT(DISTINCT pm.post_id) AS matches
+FROM {table_prefix}postmeta AS pm
+INNER JOIN {table_prefix}posts AS p ON p.ID = pm.post_id
+WHERE p.post_type = 'product'
+  AND p.post_status IN ('publish', 'private')
+  AND pm.meta_key IN ('_yoast_wpseo_title', '_yoast_wpseo_metadesc')
+""".strip(),
+        ),
+        (
+            "rank_math_product_meta",
+            "Rank Math product meta",
+            f"""
+SELECT COUNT(DISTINCT pm.post_id) AS matches
+FROM {table_prefix}postmeta AS pm
+INNER JOIN {table_prefix}posts AS p ON p.ID = pm.post_id
+WHERE p.post_type = 'product'
+  AND p.post_status IN ('publish', 'private')
+  AND pm.meta_key IN ('rank_math_title', 'rank_math_description')
+""".strip(),
+        ),
+        (
+            "yoast_category_meta",
+            "Yoast SEO category meta",
+            f"""
+SELECT COUNT(DISTINCT tm.term_id) AS matches
+FROM {table_prefix}termmeta AS tm
+INNER JOIN {table_prefix}term_taxonomy AS tt ON tt.term_id = tm.term_id
+WHERE tt.taxonomy = 'product_cat'
+  AND tm.meta_key IN ('_yoast_wpseo_title', '_yoast_wpseo_metadesc')
+""".strip(),
+        ),
+        (
+            "rank_math_category_meta",
+            "Rank Math category meta",
+            f"""
+SELECT COUNT(DISTINCT tm.term_id) AS matches
+FROM {table_prefix}termmeta AS tm
+INNER JOIN {table_prefix}term_taxonomy AS tt ON tt.term_id = tm.term_id
+WHERE tt.taxonomy = 'product_cat'
+  AND tm.meta_key IN ('rank_math_title', 'rank_math_description')
+""".strip(),
+        ),
+    ]
+
+    results: Dict[str, int] = {}
+    tunnel_kwargs = get_tunnel_kwargs(config)
+    gateway = (ssh_cfg["host"], int(ssh_cfg["port"]))
+
+    try:
+        LOGGER.info("Starting SEO diagnostics with table_prefix=%s", table_prefix)
         with SSHTunnelForwarder(gateway, **tunnel_kwargs) as tunnel:
             try:
                 connection = pymysql.connect(
@@ -440,41 +572,41 @@ def fetch_rows(config: Dict[str, Any], specs: Iterable[QuerySpec]) -> List[Dict[
 
             try:
                 with connection.cursor() as cursor:
-                    for spec in specs:
-                        LOGGER.info("Running query: %s", spec.name)
+                    for query_name, query_label, sql in diagnostic_queries:
+                        LOGGER.info("Running diagnostic query: %s", query_label)
                         try:
-                            cursor.execute(spec.sql)
-                            result = cursor.fetchall()
+                            cursor.execute(sql)
+                            result = cursor.fetchone() or {}
                         except pymysql.MySQLError as exc:
-                            raise RuntimeError(f"SQL query failed for '{spec.name}'. Check the configured SQL and database structure.") from exc
-
-                        if not result:
-                            LOGGER.warning("Query '%s' returned 0 rows.", spec.name)
-                            continue
-
-                        LOGGER.info("Fetched %s rows for %s", len(result), spec.name)
-                        for row in result:
-                            rows.append(validate_row(row, spec.entity_type, base_url))
+                            raise RuntimeError(
+                                "SEO diagnostics failed. Check export.table_prefix and whether the WordPress/WooCommerce tables exist."
+                            ) from exc
+                        results[query_name] = int(result.get("matches") or 0)
             finally:
                 connection.close()
+                LOGGER.info("Database connection closed.")
     except BaseSSHTunnelForwarderError as exc:
         raise RuntimeError("SSH tunnel connection failed. Check SSH host, port, credentials, and remote MySQL bind settings.") from exc
     except OSError as exc:
         raise RuntimeError("SSH connection failed due to a network or socket error.") from exc
 
-    return rows
-
-
-def test_connection(config: Dict[str, Any]) -> None:
-    """Test SSH tunnel and DB connectivity."""
-    test_spec = QuerySpec(name="healthcheck", sql="SELECT 1 AS id, '' AS url, '' AS seo_title, '' AS seo_description", entity_type="healthcheck")
-    fetch_rows(config, [test_spec])
+    print("SEO diagnostics")
+    print(f"- table_prefix: {table_prefix}")
+    print("- built-in export priority: Yoast SEO -> Rank Math -> WordPress/WooCommerce fallback")
+    print(f"- published/private products: {results['published_products']}")
+    print(f"- product categories: {results['product_categories']}")
+    print(f"- Yoast SEO product meta detected on {results['yoast_product_meta']} product(s)")
+    print(f"- Rank Math product meta detected on {results['rank_math_product_meta']} product(s)")
+    print(f"- Yoast SEO category meta detected on {results['yoast_category_meta']} category record(s)")
+    print(f"- Rank Math category meta detected on {results['rank_math_category_meta']} category record(s)")
+    print("- AIOSEO is not auto-detected by the built-in export yet; use custom SQL in config.json if your site stores SEO there.")
 
 
 def write_csv(rows: List[Dict[str, str]], output_path: Path) -> None:
     """Write normalized SEO rows to CSV."""
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        LOGGER.info("Writing %s row(s) to CSV: %s", len(rows), output_path)
         with output_path.open("w", newline="", encoding="utf-8-sig") as handle:
             writer = csv.DictWriter(
                 handle,
@@ -483,6 +615,7 @@ def write_csv(rows: List[Dict[str, str]], output_path: Path) -> None:
             )
             writer.writeheader()
             writer.writerows(rows)
+        LOGGER.info("CSV file written successfully: %s", output_path)
     except (OSError, csv.Error) as exc:
         raise RuntimeError(f"Failed to write CSV file: {output_path}") from exc
 
@@ -494,6 +627,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--init", action="store_true", help="Initialize config.json interactively.")
     parser.add_argument("--run", action="store_true", help="Run export using config.json.")
+    parser.add_argument("--diagnose-seo", action="store_true", help="Detect which built-in SEO sources are present in the database.")
     parser.add_argument("--output", help="Override output CSV file path.")
     parser.add_argument("--products-only", action="store_true", help="Export only product rows.")
     parser.add_argument("--categories-only", action="store_true", help="Export only category rows.")
@@ -510,8 +644,22 @@ def main() -> int:
         init_config()
         return 0
 
+    if args.run and args.diagnose_seo:
+        print("❌ Error: choose one action. Use --run or --diagnose-seo.")
+        return 2
+
+    if args.diagnose_seo:
+        try:
+            config = validate_config(load_config())
+            diagnose_seo_sources(config)
+            return 0
+        except Exception as exc:  # pylint: disable=broad-except
+            LOGGER.exception("SEO diagnostics failed: %s", exc)
+            print(f"❌ Error: {exc}")
+            return 1
+
     if not args.run:
-        print("❌ Error: choose an action. Use --init or --run.")
+        print("❌ Error: choose an action. Use --init, --run, or --diagnose-seo.")
         return 2
 
     try:
@@ -526,15 +674,23 @@ def main() -> int:
         if not specs:
             raise ValueError("No queries selected. Check config flags or CLI options.")
 
-        rows = fetch_rows(config, specs)
         output = Path(args.output or config["export"].get("output_csv", DEFAULT_OUTPUT))
+        LOGGER.info(
+            "Starting export | queries=%s | table_prefix=%s | output=%s",
+            ",".join(spec.name for spec in specs),
+            config["export"]["table_prefix"],
+            output,
+        )
+
+        rows = fetch_rows(config, specs)
         if not rows:
             LOGGER.warning("No rows were returned by the selected queries. Writing header-only CSV.")
         write_csv(rows, output)
+        LOGGER.info("Export finished successfully. Total row(s) processed: %s", len(rows))
         print(f"✅ Export completed: {len(rows)} rows saved to {output}")
         return 0
     except Exception as exc:  # pylint: disable=broad-except
-        LOGGER.exception("Export failed")
+        LOGGER.exception("Export failed: %s", exc)
         print(f"❌ Error: {exc}")
         return 1
 
