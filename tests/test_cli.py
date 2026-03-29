@@ -3,7 +3,9 @@ import copy
 
 import pytest
 
-import seo_exporter as se
+import cli as cli_module
+import config as config_module
+import exporter as exporter_module
 
 
 def make_args(**overrides):
@@ -71,17 +73,17 @@ def make_config():
 def test_parse_args_parses_action_flags(monkeypatch, argv, expected):
     monkeypatch.setattr("sys.argv", argv)
 
-    args = se.parse_args()
+    args = cli_module.parse_args()
 
     assert getattr(args, expected) is True
     assert args.run is False
 
 
 def test_main_returns_error_when_no_action_is_selected(monkeypatch, capsys):
-    monkeypatch.setattr(se, "parse_args", lambda: make_args())
-    monkeypatch.setattr(se, "setup_logging", lambda verbose: None)
+    monkeypatch.setattr(cli_module, "parse_args", lambda: make_args())
+    monkeypatch.setattr(cli_module, "setup_logging", lambda verbose: None)
 
-    result = se.main()
+    result = cli_module.main()
 
     assert result == 2
     assert "Use --init, --run, --dry-run, --check-connection, or --diagnose-seo" in capsys.readouterr().out
@@ -95,10 +97,10 @@ def test_main_returns_error_when_no_action_is_selected(monkeypatch, capsys):
     ],
 )
 def test_main_rejects_conflicting_actions(monkeypatch, capsys, arg_overrides, expected_fragment):
-    monkeypatch.setattr(se, "parse_args", lambda: make_args(**arg_overrides))
-    monkeypatch.setattr(se, "setup_logging", lambda verbose: None)
+    monkeypatch.setattr(cli_module, "parse_args", lambda: make_args(**arg_overrides))
+    monkeypatch.setattr(cli_module, "setup_logging", lambda verbose: None)
 
-    result = se.main()
+    result = cli_module.main()
 
     assert result == 2
     assert expected_fragment in capsys.readouterr().out
@@ -112,18 +114,18 @@ def test_main_rejects_conflicting_actions(monkeypatch, capsys, arg_overrides, ex
     ],
 )
 def test_main_filters_query_specs_for_cli_flags(monkeypatch, products_only, categories_only, expected_names):
-    config = se.validate_config(copy.deepcopy(make_config()))
+    config = config_module.validate_config(copy.deepcopy(make_config()))
     all_specs = [
-        se.QuerySpec(name="products", sql="SELECT 1", entity_type="product"),
-        se.QuerySpec(name="categories", sql="SELECT 2", entity_type="category"),
+        exporter_module.QuerySpec(name="products", sql="SELECT 1", entity_type="product"),
+        exporter_module.QuerySpec(name="categories", sql="SELECT 2", entity_type="category"),
     ]
     observed = {}
 
-    monkeypatch.setattr(se, "parse_args", lambda: make_args(run=True, products_only=products_only, categories_only=categories_only))
-    monkeypatch.setattr(se, "setup_logging", lambda verbose: None)
-    monkeypatch.setattr(se, "load_config", lambda: copy.deepcopy(config))
-    monkeypatch.setattr(se, "validate_config", lambda cfg: cfg)
-    monkeypatch.setattr(se, "build_query_specs", lambda cfg: list(all_specs))
+    monkeypatch.setattr(cli_module, "parse_args", lambda: make_args(run=True, products_only=products_only, categories_only=categories_only))
+    monkeypatch.setattr(cli_module, "setup_logging", lambda verbose: None)
+    monkeypatch.setattr(cli_module, "load_config", lambda: copy.deepcopy(config))
+    monkeypatch.setattr(cli_module, "validate_config", lambda cfg: cfg)
+    monkeypatch.setattr(cli_module, "build_query_specs", lambda cfg: list(all_specs))
 
     def fake_fetch_rows(cfg, specs):
         observed["spec_names"] = [spec.name for spec in specs]
@@ -133,10 +135,10 @@ def test_main_filters_query_specs_for_cli_flags(monkeypatch, products_only, cate
         observed["rows"] = rows
         observed["output_path"] = output_path
 
-    monkeypatch.setattr(se, "fetch_rows", fake_fetch_rows)
-    monkeypatch.setattr(se, "write_csv", fake_write_csv)
+    monkeypatch.setattr(cli_module, "fetch_rows", fake_fetch_rows)
+    monkeypatch.setattr(cli_module, "write_csv", fake_write_csv)
 
-    result = se.main()
+    result = cli_module.main()
 
     assert result == 0
     assert observed["spec_names"] == expected_names
@@ -145,40 +147,40 @@ def test_main_filters_query_specs_for_cli_flags(monkeypatch, products_only, cate
 
 
 def test_main_runs_diagnostics_without_export(monkeypatch):
-    config = se.validate_config(copy.deepcopy(make_config()))
+    config = config_module.validate_config(copy.deepcopy(make_config()))
     calls = {"diagnose": 0}
 
-    monkeypatch.setattr(se, "parse_args", lambda: make_args(diagnose_seo=True))
-    monkeypatch.setattr(se, "setup_logging", lambda verbose: None)
-    monkeypatch.setattr(se, "load_config", lambda: copy.deepcopy(config))
-    monkeypatch.setattr(se, "validate_config", lambda cfg: cfg)
+    monkeypatch.setattr(cli_module, "parse_args", lambda: make_args(diagnose_seo=True))
+    monkeypatch.setattr(cli_module, "setup_logging", lambda verbose: None)
+    monkeypatch.setattr(cli_module, "load_config", lambda: copy.deepcopy(config))
+    monkeypatch.setattr(cli_module, "validate_config", lambda cfg: cfg)
 
     def fake_diagnose(cfg):
         calls["diagnose"] += 1
 
-    monkeypatch.setattr(se, "diagnose_seo_sources", fake_diagnose)
+    monkeypatch.setattr(cli_module, "diagnose_seo_sources", fake_diagnose)
 
-    result = se.main()
+    result = cli_module.main()
 
     assert result == 0
     assert calls["diagnose"] == 1
 
 
 def test_main_runs_connection_check_without_export(monkeypatch, capsys):
-    config = se.validate_config(copy.deepcopy(make_config()))
+    config = config_module.validate_config(copy.deepcopy(make_config()))
     calls = {"check": 0}
 
-    monkeypatch.setattr(se, "parse_args", lambda: make_args(check_connection=True))
-    monkeypatch.setattr(se, "setup_logging", lambda verbose: None)
-    monkeypatch.setattr(se, "load_config", lambda: copy.deepcopy(config))
-    monkeypatch.setattr(se, "validate_config", lambda cfg: cfg)
+    monkeypatch.setattr(cli_module, "parse_args", lambda: make_args(check_connection=True))
+    monkeypatch.setattr(cli_module, "setup_logging", lambda verbose: None)
+    monkeypatch.setattr(cli_module, "load_config", lambda: copy.deepcopy(config))
+    monkeypatch.setattr(cli_module, "validate_config", lambda cfg: cfg)
 
     def fake_test_connection(cfg):
         calls["check"] += 1
 
-    monkeypatch.setattr(se, "test_connection", fake_test_connection)
+    monkeypatch.setattr(cli_module, "test_connection", fake_test_connection)
 
-    result = se.main()
+    result = cli_module.main()
 
     assert result == 0
     assert calls["check"] == 1
@@ -186,19 +188,19 @@ def test_main_runs_connection_check_without_export(monkeypatch, capsys):
 
 
 def test_main_runs_dry_run_without_writing_csv(monkeypatch, capsys):
-    config = se.validate_config(copy.deepcopy(make_config()))
+    config = config_module.validate_config(copy.deepcopy(make_config()))
     observed = {}
 
-    monkeypatch.setattr(se, "parse_args", lambda: make_args(dry_run=True, products_only=True))
-    monkeypatch.setattr(se, "setup_logging", lambda verbose: None)
-    monkeypatch.setattr(se, "load_config", lambda: copy.deepcopy(config))
-    monkeypatch.setattr(se, "validate_config", lambda cfg: cfg)
+    monkeypatch.setattr(cli_module, "parse_args", lambda: make_args(dry_run=True, products_only=True))
+    monkeypatch.setattr(cli_module, "setup_logging", lambda verbose: None)
+    monkeypatch.setattr(cli_module, "load_config", lambda: copy.deepcopy(config))
+    monkeypatch.setattr(cli_module, "validate_config", lambda cfg: cfg)
 
     all_specs = [
-        se.QuerySpec(name="products", sql="SELECT 1", entity_type="product"),
-        se.QuerySpec(name="categories", sql="SELECT 2", entity_type="category"),
+        exporter_module.QuerySpec(name="products", sql="SELECT 1", entity_type="product"),
+        exporter_module.QuerySpec(name="categories", sql="SELECT 2", entity_type="category"),
     ]
-    monkeypatch.setattr(se, "build_query_specs", lambda cfg: list(all_specs))
+    monkeypatch.setattr(cli_module, "build_query_specs", lambda cfg: list(all_specs))
 
     def fake_dry_run_queries(cfg, specs):
         observed["spec_names"] = [spec.name for spec in specs]
@@ -207,10 +209,10 @@ def test_main_runs_dry_run_without_writing_csv(monkeypatch, capsys):
     def fail_write_csv(rows, output_path):
         raise AssertionError("write_csv must not be called during dry run")
 
-    monkeypatch.setattr(se, "dry_run_queries", fake_dry_run_queries)
-    monkeypatch.setattr(se, "write_csv", fail_write_csv)
+    monkeypatch.setattr(cli_module, "dry_run_queries", fake_dry_run_queries)
+    monkeypatch.setattr(cli_module, "write_csv", fail_write_csv)
 
-    result = se.main()
+    result = cli_module.main()
 
     output = capsys.readouterr().out
     assert result == 0
@@ -221,10 +223,10 @@ def test_main_runs_dry_run_without_writing_csv(monkeypatch, capsys):
 
 
 def test_load_config_exits_when_config_file_is_missing(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(se, "CONFIG_PATH", tmp_path / "missing-config.json")
+    monkeypatch.setattr(config_module, "CONFIG_PATH", tmp_path / "missing-config.json")
 
     with pytest.raises(SystemExit) as exc_info:
-        se.load_config()
+        config_module.load_config()
 
     assert exc_info.value.code == 1
     assert "config.json not found" in capsys.readouterr().out

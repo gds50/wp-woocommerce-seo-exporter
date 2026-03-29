@@ -7,7 +7,7 @@ run: ## Запуск экспорта SEO в CSV (Run SEO export to CSV)
 	@python seo_exporter.py --run $(ARGS)
 
 test: ## Запуск unit-тестов и базовой проверки синтаксиса (Run unit tests and syntax check)
-	@python -m py_compile seo_exporter.py
+	@python -m py_compile seo_exporter.py cli.py config.py db.py exporter.py
 	@python -m pytest -q
 
 clean: ## Очистка временных файлов (Clean temporary files)

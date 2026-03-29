@@ -26,6 +26,10 @@ entity_type,id,url,seo_title,seo_description
 
 ```text
 .
+├── cli.py
+├── config.py
+├── db.py
+├── exporter.py
 ├── seo_exporter.py
 ├── config.example.json
 ├── requirements.txt
@@ -35,6 +39,8 @@ entity_type,id,url,seo_title,seo_description
 ├── docs/
 └── tests/
 ```
+
+Точка входа CLI остаётся прежней: `python seo_exporter.py ...`
 
 ## Установка
 

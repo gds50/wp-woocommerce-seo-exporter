@@ -2,7 +2,9 @@ import copy
 
 import pytest
 
-import seo_exporter as se
+import config as config_module
+import db as db_module
+import exporter as exporter_module
 
 
 @pytest.fixture
@@ -42,7 +44,7 @@ def valid_config():
             },
         },
     }
-    return se.validate_config(copy.deepcopy(config))
+    return config_module.validate_config(copy.deepcopy(config))
 
 
 def test_validate_row_preserves_absolute_url_and_normalizes_none_values():
@@ -53,7 +55,7 @@ def test_validate_row_preserves_absolute_url_and_normalizes_none_values():
         "seo_description": None,
     }
 
-    result = se.validate_row(row, "product", "https://example.com")
+    result = exporter_module.validate_row(row, "product", "https://example.com")
 
     assert result == {
         "entity_type": "product",
@@ -72,7 +74,7 @@ def test_validate_row_builds_absolute_url_from_relative_path():
         "seo_description": "Description",
     }
 
-    result = se.validate_row(row, "product", "https://example.com")
+    result = exporter_module.validate_row(row, "product", "https://example.com")
 
     assert result["url"] == "https://example.com/product/test-item/"
 
@@ -85,18 +87,18 @@ def test_validate_row_uses_base_url_for_empty_path():
         "seo_description": "Description",
     }
 
-    result = se.validate_row(row, "category", "https://example.com")
+    result = exporter_module.validate_row(row, "category", "https://example.com")
 
     assert result["url"] == "https://example.com"
 
 
 def test_validate_row_raises_for_missing_required_columns():
     with pytest.raises(ValueError, match="missing required columns: seo_description"):
-        se.validate_row({"id": 1, "url": "x", "seo_title": "y"}, "product", "https://example.com")
+        exporter_module.validate_row({"id": 1, "url": "x", "seo_title": "y"}, "product", "https://example.com")
 
 
 def test_build_query_specs_returns_both_default_queries(valid_config):
-    specs = se.build_query_specs(valid_config)
+    specs = exporter_module.build_query_specs(valid_config)
 
     assert [spec.name for spec in specs] == ["products", "categories"]
     assert specs[0].sql == "SELECT * FROM wp_posts"
@@ -114,7 +116,7 @@ def test_build_query_specs_respects_enabled_flags(valid_config, include_products
     valid_config["export"]["include_products"] = include_products
     valid_config["export"]["include_categories"] = include_categories
 
-    specs = se.build_query_specs(valid_config)
+    specs = exporter_module.build_query_specs(valid_config)
 
     assert [spec.name for spec in specs] == expected_names
 
@@ -122,7 +124,7 @@ def test_build_query_specs_respects_enabled_flags(valid_config, include_products
 def test_build_query_specs_uses_custom_entity_type(valid_config):
     valid_config["export"]["queries"]["products"]["entity_type"] = "woo_product"
 
-    specs = se.build_query_specs(valid_config)
+    specs = exporter_module.build_query_specs(valid_config)
 
     assert specs[0].entity_type == "woo_product"
 
@@ -139,7 +141,7 @@ def test_write_csv_writes_expected_header_and_rows(tmp_path):
         }
     ]
 
-    se.write_csv(rows, output_path)
+    exporter_module.write_csv(rows, output_path)
 
     content = output_path.read_text(encoding="utf-8-sig").splitlines()
     assert content[0] == "entity_type;id;url;seo_title;seo_description"
@@ -149,17 +151,17 @@ def test_write_csv_writes_expected_header_and_rows(tmp_path):
 def test_write_csv_writes_header_only_when_rows_are_empty(tmp_path):
     output_path = tmp_path / "empty.csv"
 
-    se.write_csv([], output_path)
+    exporter_module.write_csv([], output_path)
 
     content = output_path.read_text(encoding="utf-8-sig").splitlines()
     assert content == ["entity_type;id;url;seo_title;seo_description"]
 
 
 def test_apply_query_filters_respects_products_only_and_categories_only(valid_config):
-    specs = se.build_query_specs(valid_config)
+    specs = exporter_module.build_query_specs(valid_config)
 
-    products_only = se.apply_query_filters(specs, products_only=True, categories_only=False)
-    categories_only = se.apply_query_filters(specs, products_only=False, categories_only=True)
+    products_only = exporter_module.apply_query_filters(specs, products_only=True, categories_only=False)
+    categories_only = exporter_module.apply_query_filters(specs, products_only=False, categories_only=True)
 
     assert [spec.name for spec in products_only] == ["products"]
     assert [spec.name for spec in categories_only] == ["categories"]
@@ -167,8 +169,8 @@ def test_apply_query_filters_respects_products_only_and_categories_only(valid_co
 
 def test_dry_run_queries_returns_counts_per_query(valid_config, monkeypatch):
     specs = [
-        se.QuerySpec(name="products", sql="SELECT products", entity_type="product"),
-        se.QuerySpec(name="categories", sql="SELECT categories", entity_type="category"),
+        exporter_module.QuerySpec(name="products", sql="SELECT products", entity_type="product"),
+        exporter_module.QuerySpec(name="categories", sql="SELECT categories", entity_type="category"),
     ]
 
     class FakeTunnel:
@@ -212,9 +214,9 @@ def test_dry_run_queries_returns_counts_per_query(valid_config, monkeypatch):
         def close(self):
             return None
 
-    monkeypatch.setattr(se, "SSHTunnelForwarder", FakeTunnel)
-    monkeypatch.setattr(se.pymysql, "connect", lambda **kwargs: FakeConnection())
+    monkeypatch.setattr(db_module, "SSHTunnelForwarder", FakeTunnel)
+    monkeypatch.setattr(db_module.pymysql, "connect", lambda **kwargs: FakeConnection())
 
-    counts = se.dry_run_queries(valid_config, specs)
+    counts = db_module.dry_run_queries(valid_config, specs)
 
     assert counts == {"products": 2, "categories": 1}
