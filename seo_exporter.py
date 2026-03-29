@@ -21,6 +21,53 @@ LOGGER = logging.getLogger("seo_exporter")
 CONFIG_PATH = Path("config.json")
 CONFIG_EXAMPLE_PATH = Path("config.example.json")
 DEFAULT_OUTPUT = "seo_export.csv"
+DEFAULT_PRODUCT_SQL = """
+SELECT
+    p.ID AS id,
+    CONCAT('product/', p.post_name, '/') AS url,
+    COALESCE(
+        NULLIF(MAX(CASE WHEN pm.meta_key = '_yoast_wpseo_title' THEN pm.meta_value END), ''),
+        NULLIF(MAX(CASE WHEN pm.meta_key = 'rank_math_title' THEN pm.meta_value END), ''),
+        p.post_title
+    ) AS seo_title,
+    COALESCE(
+        NULLIF(MAX(CASE WHEN pm.meta_key = '_yoast_wpseo_metadesc' THEN pm.meta_value END), ''),
+        NULLIF(MAX(CASE WHEN pm.meta_key = 'rank_math_description' THEN pm.meta_value END), ''),
+        NULLIF(p.post_excerpt, ''),
+        NULLIF(p.post_content, ''),
+        NULLIF(p.post_title, ''),
+        ''
+    ) AS seo_description
+FROM wp_posts AS p
+LEFT JOIN wp_postmeta AS pm ON pm.post_id = p.ID
+WHERE p.post_type = 'product'
+  AND p.post_status IN ('publish', 'private')
+GROUP BY p.ID, p.post_name, p.post_title, p.post_excerpt, p.post_content
+ORDER BY p.ID
+""".strip()
+DEFAULT_CATEGORY_SQL = """
+SELECT
+    t.term_id AS id,
+    CONCAT('product-category/', t.slug, '/') AS url,
+    COALESCE(
+        NULLIF(MAX(CASE WHEN tm.meta_key = '_yoast_wpseo_title' THEN tm.meta_value END), ''),
+        NULLIF(MAX(CASE WHEN tm.meta_key = 'rank_math_title' THEN tm.meta_value END), ''),
+        t.name
+    ) AS seo_title,
+    COALESCE(
+        NULLIF(MAX(CASE WHEN tm.meta_key = '_yoast_wpseo_metadesc' THEN tm.meta_value END), ''),
+        NULLIF(MAX(CASE WHEN tm.meta_key = 'rank_math_description' THEN tm.meta_value END), ''),
+        NULLIF(tt.description, ''),
+        NULLIF(t.name, ''),
+        ''
+    ) AS seo_description
+FROM wp_terms AS t
+INNER JOIN wp_term_taxonomy AS tt ON tt.term_id = t.term_id
+LEFT JOIN wp_termmeta AS tm ON tm.term_id = t.term_id
+WHERE tt.taxonomy = 'product_cat'
+GROUP BY t.term_id, t.slug, t.name, tt.description
+ORDER BY t.term_id
+""".strip()
 
 
 @dataclass(frozen=True)
@@ -92,14 +139,14 @@ def write_example_config() -> None:
             "queries": {
                 "products": {
                     "entity_type": "product",
-                    "sql": "SELECT id, url, seo_title, seo_description FROM some_products_view"
+                    "sql": DEFAULT_PRODUCT_SQL,
                 },
                 "categories": {
                     "entity_type": "category",
-                    "sql": "SELECT id, url, seo_title, seo_description FROM some_categories_view"
-                }
-            }
-        }
+                    "sql": DEFAULT_CATEGORY_SQL,
+                },
+            },
+        },
     }
     CONFIG_EXAMPLE_PATH.write_text(json.dumps(example, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -121,6 +168,12 @@ def prompt_bool(label: str, default: bool) -> bool:
     if not value:
         return default
     return value in {"y", "yes", "1", "true"}
+
+
+def prompt_sql(label: str, default_sql: str) -> str:
+    """Prompt for SQL and fall back to the WordPress/WooCommerce default."""
+    value = input(f"{label} [press Enter for WordPress/WooCommerce default]: ").strip()
+    return value or default_sql
 
 
 def init_config() -> None:
@@ -165,11 +218,17 @@ def init_config() -> None:
             "queries": {
                 "products": {
                     "entity_type": "product",
-                    "sql": input("SQL for products (must return id, url, seo_title, seo_description): ").strip(),
+                    "sql": prompt_sql(
+                        "SQL for products (must return id, url, seo_title, seo_description)",
+                        DEFAULT_PRODUCT_SQL,
+                    ),
                 },
                 "categories": {
                     "entity_type": "category",
-                    "sql": input("SQL for categories (must return id, url, seo_title, seo_description): ").strip(),
+                    "sql": prompt_sql(
+                        "SQL for categories (must return id, url, seo_title, seo_description)",
+                        DEFAULT_CATEGORY_SQL,
+                    ),
                 },
             },
         },

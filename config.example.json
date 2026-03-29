@@ -23,11 +23,11 @@
     "queries": {
       "products": {
         "entity_type": "product",
-        "sql": "SELECT id, url, seo_title, seo_description FROM some_products_view"
+        "sql": "SELECT\n    p.ID AS id,\n    CONCAT('product/', p.post_name, '/') AS url,\n    COALESCE(\n        NULLIF(MAX(CASE WHEN pm.meta_key = '_yoast_wpseo_title' THEN pm.meta_value END), ''),\n        NULLIF(MAX(CASE WHEN pm.meta_key = 'rank_math_title' THEN pm.meta_value END), ''),\n        p.post_title\n    ) AS seo_title,\n    COALESCE(\n        NULLIF(MAX(CASE WHEN pm.meta_key = '_yoast_wpseo_metadesc' THEN pm.meta_value END), ''),\n        NULLIF(MAX(CASE WHEN pm.meta_key = 'rank_math_description' THEN pm.meta_value END), ''),\n        NULLIF(p.post_excerpt, ''),\n        NULLIF(p.post_content, ''),\n        NULLIF(p.post_title, ''),\n        ''\n    ) AS seo_description\nFROM wp_posts AS p\nLEFT JOIN wp_postmeta AS pm ON pm.post_id = p.ID\nWHERE p.post_type = 'product'\n  AND p.post_status IN ('publish', 'private')\nGROUP BY p.ID, p.post_name, p.post_title, p.post_excerpt, p.post_content\nORDER BY p.ID"
       },
       "categories": {
         "entity_type": "category",
-        "sql": "SELECT id, url, seo_title, seo_description FROM some_categories_view"
+        "sql": "SELECT\n    t.term_id AS id,\n    CONCAT('product-category/', t.slug, '/') AS url,\n    COALESCE(\n        NULLIF(MAX(CASE WHEN tm.meta_key = '_yoast_wpseo_title' THEN tm.meta_value END), ''),\n        NULLIF(MAX(CASE WHEN tm.meta_key = 'rank_math_title' THEN tm.meta_value END), ''),\n        t.name\n    ) AS seo_title,\n    COALESCE(\n        NULLIF(MAX(CASE WHEN tm.meta_key = '_yoast_wpseo_metadesc' THEN tm.meta_value END), ''),\n        NULLIF(MAX(CASE WHEN tm.meta_key = 'rank_math_description' THEN tm.meta_value END), ''),\n        NULLIF(tt.description, ''),\n        NULLIF(t.name, ''),\n        ''\n    ) AS seo_description\nFROM wp_terms AS t\nINNER JOIN wp_term_taxonomy AS tt ON tt.term_id = t.term_id\nLEFT JOIN wp_termmeta AS tm ON tm.term_id = t.term_id\nWHERE tt.taxonomy = 'product_cat'\nGROUP BY t.term_id, t.slug, t.name, tt.description\nORDER BY t.term_id"
       }
     }
   }

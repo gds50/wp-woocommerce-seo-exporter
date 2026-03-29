@@ -45,6 +45,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Примечание: `sshtunnel` в текущем проекте требует `paramiko < 4`, это уже зафиксировано в `requirements.txt`.
+
 ## Настройка
 
 Создайте локальный конфиг:
@@ -108,6 +110,33 @@ python seo_exporter.py --run --verbose
 - путь к приватному ключу или SSH password
 - MySQL user / password / database
 - SQL-запросы для товаров и категорий
+
+## WordPress + WooCommerce notes
+
+По умолчанию проект теперь использует SQL, ориентированный на стандартную структуру WordPress и WooCommerce:
+
+- товары берутся из `wp_posts` с `post_type = 'product'`
+- SEO-мета для товаров читается из `wp_postmeta`
+- категории товаров берутся из `wp_terms` + `wp_term_taxonomy`
+- категории фильтруются по `taxonomy = 'product_cat'`
+- SEO-мета категорий читается из `wp_termmeta`
+
+Запросы по умолчанию пытаются заполнить SEO-поля в таком порядке:
+
+- Yoast SEO
+- Rank Math
+- fallback на стандартные поля WordPress / WooCommerce
+
+Что именно считается fallback:
+
+- для товаров: `post_excerpt`, затем `post_content`, затем `post_title`
+- для категорий: `description`, затем `name`
+
+Ограничения по URL:
+
+- дефолтные SQL строят человекоподобные URL через стандартные WooCommerce bases: `product/` и `product-category/`
+- если на сайте используется нестандартный prefix таблиц вместо `wp_`, его нужно заменить в SQL
+- если на сайте изменены permalink bases, их тоже нужно заменить в SQL в `config.json`
 
 ## Документация
 
