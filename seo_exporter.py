@@ -16,7 +16,7 @@ from typing import Any, Dict, Iterable, List
 
 import pymysql
 from pymysql.cursors import DictCursor
-from sshtunnel import SSHTunnelForwarder
+from sshtunnel import BaseSSHTunnelForwarderError, SSHTunnelForwarder
 
 LOGGER = logging.getLogger("seo_exporter")
 CONFIG_PATH = Path("config.json")
@@ -422,28 +422,45 @@ def fetch_rows(config: Dict[str, Any], specs: Iterable[QuerySpec]) -> List[Dict[
     tunnel_kwargs = get_tunnel_kwargs(config)
     gateway = (ssh_cfg["host"], int(ssh_cfg["port"]))
 
-    with SSHTunnelForwarder(gateway, **tunnel_kwargs) as tunnel:
-        connection = pymysql.connect(
-            host="127.0.0.1",
-            port=tunnel.local_bind_port,
-            user=db_cfg["user"],
-            password=db_cfg["password"],
-            database=db_cfg["name"],
-            charset=db_cfg.get("charset", "utf8mb4"),
-            cursorclass=DictCursor,
-            autocommit=True,
-        )
-        try:
-            with connection.cursor() as cursor:
-                for spec in specs:
-                    LOGGER.info("Running query: %s", spec.name)
-                    cursor.execute(spec.sql)
-                    result = cursor.fetchall()
-                    LOGGER.info("Fetched %s rows for %s", len(result), spec.name)
-                    for row in result:
-                        rows.append(validate_row(row, spec.entity_type, base_url))
-        finally:
-            connection.close()
+    try:
+        with SSHTunnelForwarder(gateway, **tunnel_kwargs) as tunnel:
+            try:
+                connection = pymysql.connect(
+                    host="127.0.0.1",
+                    port=tunnel.local_bind_port,
+                    user=db_cfg["user"],
+                    password=db_cfg["password"],
+                    database=db_cfg["name"],
+                    charset=db_cfg.get("charset", "utf8mb4"),
+                    cursorclass=DictCursor,
+                    autocommit=True,
+                )
+            except pymysql.MySQLError as exc:
+                raise RuntimeError("Database connection failed. Check MySQL credentials, database name, and tunnel settings.") from exc
+
+            try:
+                with connection.cursor() as cursor:
+                    for spec in specs:
+                        LOGGER.info("Running query: %s", spec.name)
+                        try:
+                            cursor.execute(spec.sql)
+                            result = cursor.fetchall()
+                        except pymysql.MySQLError as exc:
+                            raise RuntimeError(f"SQL query failed for '{spec.name}'. Check the configured SQL and database structure.") from exc
+
+                        if not result:
+                            LOGGER.warning("Query '%s' returned 0 rows.", spec.name)
+                            continue
+
+                        LOGGER.info("Fetched %s rows for %s", len(result), spec.name)
+                        for row in result:
+                            rows.append(validate_row(row, spec.entity_type, base_url))
+            finally:
+                connection.close()
+    except BaseSSHTunnelForwarderError as exc:
+        raise RuntimeError("SSH tunnel connection failed. Check SSH host, port, credentials, and remote MySQL bind settings.") from exc
+    except OSError as exc:
+        raise RuntimeError("SSH connection failed due to a network or socket error.") from exc
 
     return rows
 
@@ -456,15 +473,18 @@ def test_connection(config: Dict[str, Any]) -> None:
 
 def write_csv(rows: List[Dict[str, str]], output_path: Path) -> None:
     """Write normalized SEO rows to CSV."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=["entity_type", "id", "url", "seo_title", "seo_description"],
-            delimiter=";",
-        )
-        writer.writeheader()
-        writer.writerows(rows)
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("w", newline="", encoding="utf-8-sig") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=["entity_type", "id", "url", "seo_title", "seo_description"],
+                delimiter=";",
+            )
+            writer.writeheader()
+            writer.writerows(rows)
+    except (OSError, csv.Error) as exc:
+        raise RuntimeError(f"Failed to write CSV file: {output_path}") from exc
 
 
 def parse_args() -> argparse.Namespace:
@@ -508,6 +528,8 @@ def main() -> int:
 
         rows = fetch_rows(config, specs)
         output = Path(args.output or config["export"].get("output_csv", DEFAULT_OUTPUT))
+        if not rows:
+            LOGGER.warning("No rows were returned by the selected queries. Writing header-only CSV.")
         write_csv(rows, output)
         print(f"✅ Export completed: {len(rows)} rows saved to {output}")
         return 0
