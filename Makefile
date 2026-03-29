@@ -6,8 +6,9 @@ init: ## Первоначальная настройка проекта (Initial
 run: ## Запуск экспорта SEO в CSV (Run SEO export to CSV)
 	@python seo_exporter.py --run $(ARGS)
 
-test: ## Проверка синтаксиса скрипта (Run basic syntax check)
+test: ## Запуск unit-тестов и базовой проверки синтаксиса (Run unit tests and syntax check)
 	@python -m py_compile seo_exporter.py
+	@python -m pytest -q
 
 clean: ## Очистка временных файлов (Clean temporary files)
 	@find . -type d -name "__pycache__" -exec rm -rf {} +
