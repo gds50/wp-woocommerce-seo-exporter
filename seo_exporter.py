@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import logging
+import re
 import sys
 from dataclasses import dataclass
 from getpass import getpass
@@ -21,7 +22,9 @@ LOGGER = logging.getLogger("seo_exporter")
 CONFIG_PATH = Path("config.json")
 CONFIG_EXAMPLE_PATH = Path("config.example.json")
 DEFAULT_OUTPUT = "seo_export.csv"
-DEFAULT_PRODUCT_SQL = """
+DEFAULT_TABLE_PREFIX = "wp_"
+TABLE_PREFIX_TOKEN = "{table_prefix}"
+DEFAULT_PRODUCT_SQL_TEMPLATE = """
 SELECT
     p.ID AS id,
     CONCAT('product/', p.post_name, '/') AS url,
@@ -38,14 +41,14 @@ SELECT
         NULLIF(p.post_title, ''),
         ''
     ) AS seo_description
-FROM wp_posts AS p
-LEFT JOIN wp_postmeta AS pm ON pm.post_id = p.ID
+FROM {table_prefix}posts AS p
+LEFT JOIN {table_prefix}postmeta AS pm ON pm.post_id = p.ID
 WHERE p.post_type = 'product'
   AND p.post_status IN ('publish', 'private')
 GROUP BY p.ID, p.post_name, p.post_title, p.post_excerpt, p.post_content
 ORDER BY p.ID
 """.strip()
-DEFAULT_CATEGORY_SQL = """
+DEFAULT_CATEGORY_SQL_TEMPLATE = """
 SELECT
     t.term_id AS id,
     CONCAT('product-category/', t.slug, '/') AS url,
@@ -61,9 +64,9 @@ SELECT
         NULLIF(t.name, ''),
         ''
     ) AS seo_description
-FROM wp_terms AS t
-INNER JOIN wp_term_taxonomy AS tt ON tt.term_id = t.term_id
-LEFT JOIN wp_termmeta AS tm ON tm.term_id = t.term_id
+FROM {table_prefix}terms AS t
+INNER JOIN {table_prefix}term_taxonomy AS tt ON tt.term_id = t.term_id
+LEFT JOIN {table_prefix}termmeta AS tm ON tm.term_id = t.term_id
 WHERE tt.taxonomy = 'product_cat'
 GROUP BY t.term_id, t.slug, t.name, tt.description
 ORDER BY t.term_id
@@ -109,6 +112,101 @@ def ensure_gitignore() -> None:
             handle.write(f"{line}\n")
 
 
+def render_sql_template(sql: str, table_prefix: str) -> str:
+    """Replace the table prefix token in SQL."""
+    return sql.replace(TABLE_PREFIX_TOKEN, table_prefix)
+
+
+def validate_table_prefix(table_prefix: str) -> str:
+    """Validate a WordPress table prefix."""
+    value = table_prefix.strip()
+    if not value:
+        raise ValueError("export.table_prefix must not be empty.")
+    if not re.fullmatch(r"[A-Za-z0-9_]+", value):
+        raise ValueError("export.table_prefix may contain only letters, digits, and underscores.")
+    return value
+
+
+def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate config structure and apply backward-compatible defaults."""
+    if not isinstance(config, dict):
+        raise ValueError("Config root must be a JSON object.")
+
+    for section_name in ("ssh", "database", "export"):
+        section = config.get(section_name)
+        if not isinstance(section, dict):
+            raise ValueError(f"Config section '{section_name}' must be an object.")
+
+    ssh_cfg = config["ssh"]
+    db_cfg = config["database"]
+    export_cfg = config["export"]
+
+    for key in ("host", "username", "remote_bind_host"):
+        value = ssh_cfg.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"Missing required config key: ssh.{key}")
+        ssh_cfg[key] = value.strip()
+
+    for key in ("port", "remote_bind_port"):
+        if key not in ssh_cfg:
+            raise ValueError(f"Missing required config key: ssh.{key}")
+
+    for key in ("user", "password", "name"):
+        value = db_cfg.get(key)
+        if not isinstance(value, str):
+            raise ValueError(f"Missing required config key: database.{key}")
+        db_cfg[key] = value
+
+    base_url = export_cfg.get("base_url")
+    if not isinstance(base_url, str) or not base_url.strip():
+        raise ValueError("Missing required config key: export.base_url")
+    export_cfg["base_url"] = base_url.strip().rstrip("/")
+
+    table_prefix = validate_table_prefix(str(export_cfg.get("table_prefix", DEFAULT_TABLE_PREFIX)))
+    export_cfg["table_prefix"] = table_prefix
+    export_cfg["output_csv"] = str(export_cfg.get("output_csv") or DEFAULT_OUTPUT)
+    export_cfg["include_products"] = bool(export_cfg.get("include_products", True))
+    export_cfg["include_categories"] = bool(export_cfg.get("include_categories", True))
+
+    queries = export_cfg.get("queries")
+    if queries is None:
+        queries = {}
+        export_cfg["queries"] = queries
+    if not isinstance(queries, dict):
+        raise ValueError("Config section 'export.queries' must be an object.")
+
+    default_queries = {
+        "products": {
+            "entity_type": "product",
+            "sql": DEFAULT_PRODUCT_SQL_TEMPLATE,
+        },
+        "categories": {
+            "entity_type": "category",
+            "sql": DEFAULT_CATEGORY_SQL_TEMPLATE,
+        },
+    }
+
+    for query_name, defaults in default_queries.items():
+        query_cfg = queries.get(query_name)
+        if query_cfg is None:
+            query_cfg = {}
+            queries[query_name] = query_cfg
+        if not isinstance(query_cfg, dict):
+            raise ValueError(f"Config section 'export.queries.{query_name}' must be an object.")
+
+        entity_type = query_cfg.get("entity_type") or defaults["entity_type"]
+        sql = query_cfg.get("sql") or defaults["sql"]
+        if not isinstance(entity_type, str) or not entity_type.strip():
+            raise ValueError(f"Config key 'export.queries.{query_name}.entity_type' must be a non-empty string.")
+        if not isinstance(sql, str) or not sql.strip():
+            raise ValueError(f"Config key 'export.queries.{query_name}.sql' must be a non-empty string.")
+
+        query_cfg["entity_type"] = entity_type.strip()
+        query_cfg["sql"] = sql
+
+    return config
+
+
 def write_example_config() -> None:
     """Write config.example.json if it does not exist."""
     if CONFIG_EXAMPLE_PATH.exists():
@@ -134,16 +232,17 @@ def write_example_config() -> None:
         "export": {
             "base_url": "https://example.com",
             "output_csv": "seo_export.csv",
+            "table_prefix": DEFAULT_TABLE_PREFIX,
             "include_products": True,
             "include_categories": True,
             "queries": {
                 "products": {
                     "entity_type": "product",
-                    "sql": DEFAULT_PRODUCT_SQL,
+                    "sql": DEFAULT_PRODUCT_SQL_TEMPLATE,
                 },
                 "categories": {
                     "entity_type": "category",
-                    "sql": DEFAULT_CATEGORY_SQL,
+                    "sql": DEFAULT_CATEGORY_SQL_TEMPLATE,
                 },
             },
         },
@@ -172,7 +271,7 @@ def prompt_bool(label: str, default: bool) -> bool:
 
 def prompt_sql(label: str, default_sql: str) -> str:
     """Prompt for SQL and fall back to the WordPress/WooCommerce default."""
-    value = input(f"{label} [press Enter for WordPress/WooCommerce default]: ").strip()
+    value = input(f"{label} [press Enter for default SQL with {TABLE_PREFIX_TOKEN}]: ").strip()
     return value or default_sql
 
 
@@ -190,6 +289,7 @@ def init_config() -> None:
     print("🚀 Initializing project...")
     ssh_password = getpass("SSH password (leave empty if using private key): ")
     db_password = getpass("MySQL password: ")
+    table_prefix = validate_table_prefix(input(f"WordPress table prefix [{DEFAULT_TABLE_PREFIX}]: ").strip() or DEFAULT_TABLE_PREFIX)
     use_products = prompt_bool("Export products", True)
     use_categories = prompt_bool("Export categories", True)
 
@@ -213,6 +313,7 @@ def init_config() -> None:
         "export": {
             "base_url": input("Website base URL, for example https://example.com: ").strip().rstrip("/"),
             "output_csv": input(f"CSV output file [{DEFAULT_OUTPUT}]: ").strip() or DEFAULT_OUTPUT,
+            "table_prefix": table_prefix,
             "include_products": use_products,
             "include_categories": use_categories,
             "queries": {
@@ -220,20 +321,21 @@ def init_config() -> None:
                     "entity_type": "product",
                     "sql": prompt_sql(
                         "SQL for products (must return id, url, seo_title, seo_description)",
-                        DEFAULT_PRODUCT_SQL,
+                        DEFAULT_PRODUCT_SQL_TEMPLATE,
                     ),
                 },
                 "categories": {
                     "entity_type": "category",
                     "sql": prompt_sql(
                         "SQL for categories (must return id, url, seo_title, seo_description)",
-                        DEFAULT_CATEGORY_SQL,
+                        DEFAULT_CATEGORY_SQL_TEMPLATE,
                     ),
                 },
             },
         },
     }
 
+    validate_config(config)
     test_connection(config)
 
     CONFIG_PATH.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -288,13 +390,14 @@ def build_query_specs(config: Dict[str, Any]) -> List[QuerySpec]:
     """Create enabled query definitions from config."""
     export_cfg = config["export"]
     query_cfg = export_cfg["queries"]
+    table_prefix = export_cfg["table_prefix"]
     specs: List[QuerySpec] = []
 
     if export_cfg.get("include_products", True):
         specs.append(
             QuerySpec(
                 name="products",
-                sql=query_cfg["products"]["sql"],
+                sql=render_sql_template(query_cfg["products"]["sql"], table_prefix),
                 entity_type=query_cfg["products"].get("entity_type", "product"),
             )
         )
@@ -302,7 +405,7 @@ def build_query_specs(config: Dict[str, Any]) -> List[QuerySpec]:
         specs.append(
             QuerySpec(
                 name="categories",
-                sql=query_cfg["categories"]["sql"],
+                sql=render_sql_template(query_cfg["categories"]["sql"], table_prefix),
                 entity_type=query_cfg["categories"].get("entity_type", "category"),
             )
         )
@@ -392,7 +495,7 @@ def main() -> int:
         return 2
 
     try:
-        config = load_config()
+        config = validate_config(load_config())
         specs = build_query_specs(config)
 
         if args.products_only:

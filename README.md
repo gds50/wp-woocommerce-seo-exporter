@@ -109,6 +109,7 @@ python seo_exporter.py --run --verbose
 - SSH host / port / username
 - путь к приватному ключу или SSH password
 - MySQL user / password / database
+- `table_prefix` для WordPress-таблиц
 - SQL-запросы для товаров и категорий
 
 ## WordPress + WooCommerce notes
@@ -135,8 +136,29 @@ python seo_exporter.py --run --verbose
 Ограничения по URL:
 
 - дефолтные SQL строят человекоподобные URL через стандартные WooCommerce bases: `product/` и `product-category/`
-- если на сайте используется нестандартный prefix таблиц вместо `wp_`, его нужно заменить в SQL
+- если на сайте используется нестандартный prefix таблиц вместо `wp_`, можно поменять `export.table_prefix`
 - если на сайте изменены permalink bases, их тоже нужно заменить в SQL в `config.json`
+
+## Config flexibility
+
+В `config.json` теперь поддерживаются оба сценария:
+
+- поменять `export.table_prefix`, если таблицы сайта используют не `wp_`, а другой prefix, например `wp2_`
+- задать полностью свои SQL в `export.queries.products.sql` и `export.queries.categories.sql`
+
+Поведение по умолчанию остается совместимым:
+
+- если `table_prefix` не указан, используется `wp_`
+- если `queries` или конкретный `sql` не заданы, скрипт подставляет стандартные WordPress/WooCommerce запросы
+- если в SQL есть токен `{table_prefix}`, он заменяется на значение `export.table_prefix` во время запуска
+- старые конфиги с уже прописанными SQL продолжают работать без изменений
+
+На старте скрипт валидирует конфиг до подключения к SSH:
+
+- обязательные секции `ssh`, `database`, `export`
+- обязательные ключи подключения и `export.base_url`
+- корректность `export.table_prefix`
+- корректность структуры `export.queries`
 
 ## Документация
 
