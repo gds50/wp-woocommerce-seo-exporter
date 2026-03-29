@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.0.1 - 2026-03-29
+
+Patch release with corrected SEO field priority for sites that store metadata in theme or custom fields.
+
+### Fixed
+
+- default product export SQL now prioritizes `seo_meta_title` and `seo_meta_description` before plugin-specific fallbacks
+- default category export SQL now prioritizes `seo_meta_title` and `seo_meta_description` before plugin-specific fallbacks
+- SEO diagnostics now report theme/custom `seo_meta_*` usage alongside plugin-based sources
+
+### Compatibility
+
+- Python 3.x
+- WordPress
+- WooCommerce
+- Bono theme
+- theme/custom SEO meta fields via `seo_meta_title` and `seo_meta_description`
+- Yoast SEO
+- Rank Math
+- fallback to standard WordPress / WooCommerce fields
+
 ## v1.0.0 - 2026-03-29
 
 First stable open-source release.
